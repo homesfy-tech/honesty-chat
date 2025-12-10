@@ -9,16 +9,14 @@
       "src": "apps/widget/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "apps/widget/dist",
-        "buildCommand": "cd apps/widget && npm install && npm run build"
+        "distDir": "apps/widget/dist"
       }
     },
     {
       "src": "apps/dashboard/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "apps/dashboard/dist",
-        "buildCommand": "cd apps/dashboard && npm install && npm run build"
+        "distDir": "apps/dashboard/dist"
       }
     }
   ],

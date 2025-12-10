@@ -20,20 +20,8 @@
       "destination": "/apps/api/api/index.js"
     },
     {
-      "source": "/widget.js",
-      "destination": "/widget.js"
-    },
-    {
-      "source": "/style.css",
-      "destination": "/style.css"
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": "/apps/dashboard/dist/assets/$1"
-    },
-    {
       "source": "/(.*)",
-      "destination": "/apps/dashboard/dist/index.html"
+      "destination": "/index.html"
     }
   ],
   "headers": [

@@ -1,8 +1,5 @@
 {
   "version": 2,
-  "buildCommand": null,
-  "installCommand": null,
-  "framework": null,
   "builds": [
     {
       "src": "homesfy-chat-buddy/apps/api/api/index.js",

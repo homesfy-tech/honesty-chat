@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "outputDirectory": "homesfy-chat-buddy/apps/dashboard/dist",
+  "outputDirectory": "apps/dashboard/dist",
   "builds": [
     {
-      "src": "homesfy-chat-buddy/apps/api/api/index.js",
+      "src": "apps/api/api/index.js",
       "use": "@vercel/node",
       "config": {
         "maxDuration": 30,
@@ -11,40 +11,40 @@
       }
     },
     {
-      "src": "homesfy-chat-buddy/apps/widget/package.json",
+      "src": "apps/widget/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "homesfy-chat-buddy/apps/widget/dist"
+        "distDir": "apps/widget/dist"
       }
     },
     {
-      "src": "homesfy-chat-buddy/apps/dashboard/package.json",
+      "src": "apps/dashboard/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "homesfy-chat-buddy/apps/dashboard/dist"
+        "distDir": "apps/dashboard/dist"
       }
     }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/homesfy-chat-buddy/apps/api/api/index.js"
+      "destination": "/apps/api/api/index.js"
     },
     {
       "source": "/widget.js",
-      "destination": "/homesfy-chat-buddy/apps/widget/dist/widget.js"
+      "destination": "/apps/widget/dist/widget.js"
     },
     {
       "source": "/style.css",
-      "destination": "/homesfy-chat-buddy/apps/widget/dist/style.css"
+      "destination": "/apps/widget/dist/style.css"
     },
     {
       "source": "/assets/(.*)",
-      "destination": "/homesfy-chat-buddy/apps/dashboard/dist/assets/$1"
+      "destination": "/apps/dashboard/dist/assets/$1"
     },
     {
       "source": "/(.*)",
-      "destination": "/homesfy-chat-buddy/apps/dashboard/dist/index.html"
+      "destination": "/apps/dashboard/dist/index.html"
     }
   ],
   "headers": [

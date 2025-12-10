@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": "homesfy-chat-buddy/apps/dashboard/dist",
   "builds": [
     {
       "src": "homesfy-chat-buddy/apps/api/api/index.js",

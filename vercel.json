@@ -2,34 +2,32 @@
   "version": 2,
   "builds": [
     {
-      "src": "apps/api/api/index.js",
+      "src": "homesfy-chat-buddy/apps/api/api/index.js",
       "use": "@vercel/node"
     },
     {
-      "src": "apps/widget/package.json",
+      "src": "homesfy-chat-buddy/apps/widget/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "apps/widget/dist",
-        "buildCommand": "cd apps/widget && npm install && npm run build"
+        "distDir": "homesfy-chat-buddy/apps/widget/dist"
       }
     },
     {
-      "src": "apps/dashboard/package.json",
+      "src": "homesfy-chat-buddy/apps/dashboard/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "apps/dashboard/dist",
-        "buildCommand": "cd apps/dashboard && npm install && npm run build"
+        "distDir": "homesfy-chat-buddy/apps/dashboard/dist"
       }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/apps/api/api/index.js"
+      "dest": "/homesfy-chat-buddy/apps/api/api/index.js"
     },
     {
       "src": "/widget.js",
-      "dest": "/apps/widget/dist/widget.js",
+      "dest": "/homesfy-chat-buddy/apps/widget/dist/widget.js",
       "headers": {
         "Content-Type": "application/javascript; charset=utf-8",
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -38,7 +36,7 @@
     },
     {
       "src": "/style.css",
-      "dest": "/apps/widget/dist/style.css",
+      "dest": "/homesfy-chat-buddy/apps/widget/dist/style.css",
       "headers": {
         "Content-Type": "text/css; charset=utf-8",
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -47,21 +45,21 @@
     },
     {
       "src": "/assets/(.*)",
-      "dest": "/apps/dashboard/dist/assets/$1",
+      "dest": "/homesfy-chat-buddy/apps/dashboard/dist/assets/$1",
       "headers": {
         "Cache-Control": "public, max-age=31536000, immutable"
       }
     },
     {
       "src": "/(.*)",
-      "dest": "/apps/dashboard/dist/index.html",
+      "dest": "/homesfy-chat-buddy/apps/dashboard/dist/index.html",
       "headers": {
         "Cache-Control": "public, max-age=0, must-revalidate"
       }
     }
   ],
   "functions": {
-    "apps/api/api/index.js": {
+    "homesfy-chat-buddy/apps/api/api/index.js": {
       "maxDuration": 30,
       "memory": 1024
     }
@@ -111,3 +109,4 @@
     }
   ]
 }
+

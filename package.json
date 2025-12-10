@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "build": "cd homesfy-chat-buddy && npm install && npm run build:widget && cd apps/dashboard && npm install && npm run build",
+    "build:widget": "cd homesfy-chat-buddy/apps/widget && npm install && npm run build",
+    "build:dashboard": "cd homesfy-chat-buddy/apps/dashboard && npm install && npm run build"
+  },
   "devDependencies": {
     "vite": "^7.2.7"
   }

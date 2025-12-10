@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "outputDirectory": "apps/dashboard/dist",
   "builds": [
     {
       "src": "apps/api/api/index.js",

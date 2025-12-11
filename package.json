@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm run build:widget && npm run build:dashboard && npm run build:copy",
-    "build:widget": "cd apps/widget && npm install && npm run build",
-    "build:dashboard": "cd apps/dashboard && npm install && npm run build",
-    "build:copy": "cp apps/widget/dist/widget.js apps/dashboard/dist/widget.js && cp apps/widget/dist/style.css apps/dashboard/dist/style.css"
+    "dev": "bash start-dev.sh",
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:dashboard": "cd apps/dashboard && npm run dev",
+    "dev:widget": "cd apps/widget && npm run dev",
+    "build": "bash build-all.sh",
+    "test": "bash test-local.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

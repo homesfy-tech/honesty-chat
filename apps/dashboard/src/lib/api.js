@@ -30,9 +30,10 @@ if (isDevelopment) {
     apiBaseUrl = trimmed ? (/\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`) : undefined;
   }
   
-  // Production fallback
+  // Production fallback - should be set via VITE_API_BASE_URL during build
   if (!apiBaseUrl) {
-    apiBaseUrl = "https://api-825pnmuvj-fahimkhan-gits-projects.vercel.app/api";
+    console.error("⚠️ VITE_API_BASE_URL not set - API calls may fail");
+    apiBaseUrl = "/api"; // Fallback to relative path
   }
   
   console.log("🌐 Production mode: Using API at", apiBaseUrl);

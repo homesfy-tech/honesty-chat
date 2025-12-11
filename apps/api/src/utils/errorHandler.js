@@ -7,7 +7,7 @@
  * Format error response for API
  */
 export function formatErrorResponse(error, req) {
-  const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+  const isDevelopment = process.env.NODE_ENV !== 'production';
   
   // Don't expose internal errors in production
   const message = isDevelopment 
@@ -47,7 +47,7 @@ export function logError(error, context = {}) {
   };
 
   // In production, you might want to send to a logging service
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production') {
     console.error('Error:', JSON.stringify(errorInfo));
   } else {
     console.error('Error:', errorInfo);

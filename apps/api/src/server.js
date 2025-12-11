@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import http from "http";
+import path from "path";
+import fs from "fs";
 import { Server as SocketIOServer } from "socket.io";
 import { config } from "./config.js";
 import leadsRouter from "./routes/leads.js";
@@ -9,6 +11,7 @@ import eventsRouter from "./routes/events.js";
 import chatSessionsRouter from "./routes/chatSessions.js";
 import chatRouter from "./routes/chat.js";
 import usersRouter from "./routes/users.js";
+import uploadRouter from "./routes/upload.js";
 
 function expandAllowedOrigins(origins) {
   const expanded = new Set(origins);
@@ -43,46 +46,61 @@ async function bootstrap() {
   const { logger } = await import('./utils/logger.js');
   
   try {
-    // Validate environment variables (warnings only, don't block startup)
     try {
       const { validateEnvironment } = await import("./utils/validateEnv.js");
       validateEnvironment();
     } catch (error) {
-      // Only throw if in production and critical vars are missing
-      if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      if (process.env.NODE_ENV === 'production') {
         logger.error("❌ Environment validation failed:", error);
-        // Don't throw - allow graceful degradation
       }
     }
 
-    // Initialize database connection if MongoDB URI is provided
+    // Initialize database connection (PostgreSQL)
     let storageType = "file";
-    if (process.env.MONGODB_URI) {
+    if (process.env.DATABASE_URL || process.env.POSTGRESQL_URI) {
       try {
-        const { connectMongoDB } = await import("./db/mongodb.js");
-        await connectMongoDB();
-        storageType = "mongodb";
-        logger.log("✅ Using MongoDB for data storage");
+        const { connectPostgreSQL, initializeSchema } = await import("./db/postgresql.js");
+        await connectPostgreSQL();
+        
+        // Initialize schema if needed (only in development or first run)
+        if (process.env.INIT_DB_SCHEMA === 'true' || process.env.NODE_ENV !== 'production') {
+          try {
+            await initializeSchema();
+          } catch (schemaError) {
+            // Schema might already exist, that's okay
+            logger.log("📋 Schema check completed");
+          }
+        }
+        
+        storageType = "postgresql";
+        logger.log("✅ Using PostgreSQL for data storage");
+        
+        // Initialize Redis cache (optional)
+        try {
+          const { initRedis } = await import("./storage/redisCache.js");
+          await initRedis();
+        } catch (error) {
+          logger.log("ℹ️  Redis caching not available (optional)");
+        }
       } catch (error) {
-        logger.error("❌ Failed to connect to MongoDB:", error);
-        if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-          // In production, MongoDB is required - log error but continue
-          logger.error("⚠️ Production mode requires MongoDB - some features may not work");
+        logger.error("❌ Failed to connect to PostgreSQL:", error);
+        if (process.env.NODE_ENV === 'production') {
+          logger.error("⚠️ Production mode requires PostgreSQL - some features may not work");
         } else {
           logger.log("⚠️ Falling back to file-based storage");
         }
         storageType = "file";
       }
     } else {
-      if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-        logger.warn("⚠️ MONGODB_URI not set in production - using file storage (not recommended)");
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn("⚠️ DATABASE_URL not set in production - using file storage (not recommended)");
       } else {
-        logger.log("📁 Using file-based storage (MONGODB_URI not set)");
+        logger.log("📁 Using file-based storage (DATABASE_URL not set)");
       }
     }
     
     // Use logger for environment info (only in development)
-    logger.log("🌍 Environment:", process.env.VERCEL ? "Vercel" : "Local");
+    logger.log("🌍 Environment: Local");
     logger.log("📂 Working directory:", process.cwd());
 
     const app = express();
@@ -91,20 +109,14 @@ async function bootstrap() {
       : expandAllowedOrigins(config.allowedOrigins);
     const socketOrigin = expandedOrigins.includes("*") ? "*" : expandedOrigins;
 
-    // Only create Socket.IO server for non-serverless environments
-    let server = null;
-    let io = null;
-    
-    if (!process.env.VERCEL) {
-      server = http.createServer(app);
-      io = new SocketIOServer(server, {
-        cors: {
-          origin: socketOrigin,
-        },
-      });
-    }
+    // Create Socket.IO server
+    const server = http.createServer(app);
+    const io = new SocketIOServer(server, {
+      cors: {
+        origin: socketOrigin,
+      },
+    });
 
-    // Request ID middleware for tracing
     try {
       const { requestIdMiddleware } = await import('./middleware/requestId.js');
       app.use(requestIdMiddleware);
@@ -112,7 +124,6 @@ async function bootstrap() {
       logger.warn('⚠️  Request ID middleware not available');
     }
 
-    // Request timeout middleware
     try {
       const { requestTimeout } = await import('./middleware/requestTimeout.js');
       app.use(requestTimeout);
@@ -120,34 +131,67 @@ async function bootstrap() {
       logger.warn('⚠️  Request timeout middleware not available');
     }
 
-    // Reduced request body size limits for security (prevent DoS)
+    // Response compression (Gzip) for better performance
+    try {
+      const compression = (await import('compression')).default;
+      app.use(compression({
+        level: 6, // Compression level (1-9, 6 is good balance)
+        filter: (req, res) => {
+          // Don't compress if client doesn't support it
+          if (req.headers['x-no-compression']) {
+            return false;
+          }
+          // Use compression for all text-based responses
+          return compression.filter(req, res);
+        }
+      }));
+      logger.log('✅ Response compression enabled (Gzip)');
+    } catch (error) {
+      logger.warn('⚠️  Compression not available (compression not installed)');
+      logger.warn('   Install with: npm install compression');
+    }
+
+    // HTTPS enforcement (production only)
+    if (process.env.NODE_ENV === 'production' && process.env.FORCE_HTTPS !== 'false') {
+      app.use((req, res, next) => {
+        // Check if request is already HTTPS or behind a proxy
+        const isSecure = req.secure || 
+                        req.headers['x-forwarded-proto'] === 'https' ||
+                        req.headers['x-forwarded-ssl'] === 'on';
+        
+        if (!isSecure && req.method === 'GET') {
+          // Redirect to HTTPS
+          const httpsUrl = `https://${req.headers.host}${req.url}`;
+          return res.redirect(301, httpsUrl);
+        }
+        next();
+      });
+      logger.log('✅ HTTPS enforcement enabled');
+    }
+
     app.use(express.json({ limit: '1mb' }));
     app.use(express.urlencoded({ extended: true, limit: '1mb' }));
     
-    // Security headers with Helmet (configured for widget embedding)
     try {
       const helmet = (await import('helmet')).default;
       app.use(helmet({
-        contentSecurityPolicy: false, // Disable CSP to allow widget embedding
-        crossOriginEmbedderPolicy: false, // Allow cross-origin embedding
-        crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow widget resources
-        // Additional security headers
+        contentSecurityPolicy: false,
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: "cross-origin" },
         hsts: {
-          maxAge: 31536000, // 1 year
+          maxAge: 31536000,
           includeSubDomains: true,
           preload: true,
         },
-        noSniff: true, // Prevent MIME type sniffing
-        xssFilter: true, // Enable XSS filter
+        noSniff: true,
+        xssFilter: true,
         referrerPolicy: { policy: "strict-origin-when-cross-origin" },
       }));
       logger.log('✅ Security headers enabled (Helmet)');
     } catch (error) {
-      logger.warn('⚠️  Helmet not available (helmet not installed)');
-      logger.warn('   Install with: npm install helmet');
+      logger.warn('⚠️  Helmet not available');
     }
     
-    // Rate limiting
     let apiLimiter, leadLimiter, strictLimiter;
     try {
       const rateLimitModule = await import('./middleware/rateLimit.js');
@@ -155,7 +199,6 @@ async function bootstrap() {
       leadLimiter = rateLimitModule.leadLimiter;
       strictLimiter = rateLimitModule.strictLimiter;
       
-      // Apply general API rate limiting
       app.use('/api/', apiLimiter);
       logger.log('✅ Rate limiting enabled');
     } catch (error) {
@@ -198,23 +241,18 @@ async function bootstrap() {
 
     app.use(cors(corsOptions));
     
-    // Additional CORS headers for all responses
     app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    // If using wildcard, don't set credentials (browser doesn't allow both)
-    if (expandedOrigins.includes("*")) {
-      res.header('Access-Control-Allow-Origin', '*');
-      // CRITICAL: Never set Access-Control-Allow-Credentials when using wildcard
-      // This causes CORS errors in browsers
-    } else {
-      // Use specific origin and allow credentials
-      if (origin && expandedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-      } else {
+      const origin = req.headers.origin;
+      if (expandedOrigins.includes("*")) {
         res.header('Access-Control-Allow-Origin', '*');
+      } else {
+        if (origin && expandedOrigins.includes(origin)) {
+          res.header('Access-Control-Allow-Origin', origin);
+          res.header('Access-Control-Allow-Credentials', 'true');
+        } else {
+          res.header('Access-Control-Allow-Origin', '*');
+        }
       }
-    }
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-API-Key');
       next();
@@ -239,7 +277,6 @@ async function bootstrap() {
       res.type("application/json").send("{}");
     });
 
-    // Socket.IO only works in non-serverless environments
     if (io) {
       io.on("connection", (socket) => {
         const { microsite } = socket.handshake.query;
@@ -249,14 +286,8 @@ async function bootstrap() {
       });
     }
 
-    app.get("/health", async (_req, res) => {
-      res.json({ 
-        status: "ok",
-        mode: "keyword-matching"
-      });
-    });
+    // Health endpoint is now handled by monitoring middleware above
 
-    // Apply route-specific rate limiters if available
     if (leadLimiter) {
       app.use("/api/leads", leadLimiter);
     }
@@ -270,6 +301,67 @@ async function bootstrap() {
     app.use("/api/chat-sessions", chatSessionsRouter);
     app.use("/api/chat", chatRouter);
     app.use("/api/users", usersRouter);
+    app.use("/api/upload", uploadRouter);
+    
+    try {
+      const { getHealthCheck, getMonitoringStats } = await import('./middleware/monitoring.js');
+      
+      app.get("/health", (req, res) => {
+        res.json(getHealthCheck());
+      });
+      
+      app.get("/api/monitoring/stats", (req, res) => {
+        if (process.env.NODE_ENV === 'production') {
+          const apiKey = req.headers['x-api-key'];
+          if (apiKey !== process.env.WIDGET_CONFIG_API_KEY) {
+            return res.status(401).json({ error: 'Unauthorized' });
+          }
+        }
+        res.json(getMonitoringStats());
+      });
+    } catch (error) {
+      app.get("/health", (req, res) => {
+        res.json({ status: "ok", mode: "keyword-matching" });
+      });
+    }
+    
+    // Serve static files (uploads)
+    // Custom route to handle URL-encoded filenames properly
+    // This must be registered BEFORE any other /uploads routes
+    // process.cwd() is already in apps/api, so just use 'uploads'
+    const uploadsPath = path.join(process.cwd(), "uploads");
+    app.get("/uploads/*", (req, res) => {
+      try {
+        // Get the filename from the request path (everything after /uploads/)
+        const requestedPath = req.path.replace('/uploads/', '');
+        const decodedFilename = decodeURIComponent(requestedPath);
+        const filePath = path.join(uploadsPath, decodedFilename);
+        
+        // Security: ensure the file is within the uploads directory
+        const resolvedPath = path.resolve(filePath);
+        const resolvedUploadsPath = path.resolve(uploadsPath);
+        if (!resolvedPath.startsWith(resolvedUploadsPath)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
+        // Set proper content type
+        if (decodedFilename.endsWith('.gif')) {
+          res.setHeader('Content-Type', 'image/gif');
+        } else if (decodedFilename.endsWith('.png')) {
+          res.setHeader('Content-Type', 'image/png');
+        } else if (decodedFilename.endsWith('.jpg') || decodedFilename.endsWith('.jpeg')) {
+          res.setHeader('Content-Type', 'image/jpeg');
+        } else if (decodedFilename.endsWith('.webp')) {
+          res.setHeader('Content-Type', 'image/webp');
+        }
+        
+        // Send the file
+        res.sendFile(resolvedPath);
+      } catch (error) {
+        logger.error("Failed to serve upload file", error);
+        res.status(404).json({ error: "File not found" });
+      }
+    });
 
     logger.log("✅ Chat API using keyword matching for responses");
 
@@ -323,25 +415,15 @@ async function bootstrap() {
       });
     });
 
-    // For Vercel serverless, export the app
-    if (process.env.VERCEL) {
-      logger.log("✅ Express app configured for Vercel serverless");
-      return app;
-    }
-
-    // For local development, start the server
-    if (server) {
-      server.listen(config.port, () => {
-        logger.log(`API server listening on port ${config.port}`);
-      });
-    }
+    // Start the server
+    server.listen(config.port, () => {
+      logger.log(`API server listening on port ${config.port}`);
+    });
     
     return app;
   } catch (error) {
-    // Always log fatal errors (even in production)
     const { logger } = await import('./utils/logger.js');
     logger.error("❌ Fatal error in bootstrap:", error);
-    // Create a minimal Express app that returns errors
     const errorApp = express();
     errorApp.use((req, res) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -354,15 +436,10 @@ async function bootstrap() {
   }
 }
 
-// For local development
-if (!process.env.VERCEL) {
-  bootstrap().catch(async (error) => {
-    const { logger } = await import('./utils/logger.js');
-    logger.error("Failed to start API server", error);
-    process.exit(1);
-  });
-}
-
-// Export bootstrap function for Vercel serverless
-export default bootstrap;
+// Start the server
+bootstrap().catch(async (error) => {
+  const { logger } = await import('./utils/logger.js');
+  logger.error("Failed to start API server", error);
+  process.exit(1);
+});
 

@@ -8,9 +8,9 @@ export function validateEnvironment() {
   const warnings = [];
 
   // Required for production
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    if (!process.env.MONGODB_URI) {
-      errors.push('MONGODB_URI is required for production deployment');
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.DATABASE_URL && !process.env.POSTGRESQL_URI) {
+      errors.push('DATABASE_URL or POSTGRESQL_URI is required for production deployment');
     }
     
     if (!process.env.WIDGET_CONFIG_API_KEY) {
@@ -22,11 +22,11 @@ export function validateEnvironment() {
     }
   }
 
-  // Validate MongoDB URI format if set
-  if (process.env.MONGODB_URI) {
-    const uri = process.env.MONGODB_URI.trim();
-    if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
-      errors.push('MONGODB_URI must start with mongodb:// or mongodb+srv://');
+  // Validate PostgreSQL URI format if set
+  if (process.env.DATABASE_URL || process.env.POSTGRESQL_URI) {
+    const uri = (process.env.DATABASE_URL || process.env.POSTGRESQL_URI).trim();
+    if (!uri.startsWith('postgresql://') && !uri.startsWith('postgres://')) {
+      errors.push('DATABASE_URL or POSTGRESQL_URI must start with postgresql:// or postgres://');
     }
   }
 

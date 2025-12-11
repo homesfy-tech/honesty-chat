@@ -3,7 +3,7 @@
  * Prevents sensitive data exposure in production
  */
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+const isProduction = process.env.NODE_ENV === 'production';
 const isDevelopment = !isProduction;
 
 /**

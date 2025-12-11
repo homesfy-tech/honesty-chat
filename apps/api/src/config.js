@@ -7,11 +7,16 @@ const normalizedPort =
     ? Number(process.env.API_PORT.trim())
     : 4000;
 
-const isVercel = Boolean(process.env.VERCEL);
+// Storage: Use PostgreSQL if DATABASE_URL is set, otherwise file-based storage
+// PostgreSQL is preferred for production (better for relational data, location support)
+// File storage is for development only
 
-// Storage: Use MongoDB if MONGODB_URI is set, otherwise use file-based storage
-// MongoDB is preferred for production (persistent, scalable)
-// File storage is fallback for development or when MongoDB is not configured
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRESQL_URI;
+
+let dataStore = "file";
+if (databaseUrl) {
+  dataStore = "postgresql";
+}
 
 export const config = {
   port: Number.isFinite(normalizedPort) ? normalizedPort : 4000,
@@ -19,8 +24,8 @@ export const config = {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
-  dataStore: process.env.MONGODB_URI ? "mongodb" : "file",
-  mongodbUri: process.env.MONGODB_URI || null,
+  dataStore: dataStore,
+  databaseUrl: databaseUrl || null,
   widgetConfigApiKey: (process.env.WIDGET_CONFIG_API_KEY && process.env.WIDGET_CONFIG_API_KEY.trim()) || null,
 };
 

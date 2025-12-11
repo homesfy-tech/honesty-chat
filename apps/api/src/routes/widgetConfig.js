@@ -7,8 +7,8 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getConfigStore() {
-  if (config.dataStore === "mongodb") {
-    const store = await import("../storage/mongoWidgetConfigStore.js");
+  if (config.dataStore === "postgresql") {
+    const store = await import("../storage/postgresWidgetConfigStore.js");
     return {
       getWidgetConfig: store.getWidgetConfig,
       updateWidgetConfig: store.updateWidgetConfig,
@@ -22,60 +22,94 @@ async function getConfigStore() {
   }
 }
 
-// GET is public - widget needs to read config
 router.get("/:projectId", async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { getWidgetConfig } = await getConfigStore();
-    const config = await getWidgetConfig(projectId);
+    
+    let config = null;
+    try {
+      const { getCachedConfig } = await import("../storage/redisCache.js");
+      config = await getCachedConfig(projectId);
+    } catch (error) {
+      // Redis not available
+    }
+    
+    if (!config) {
+      const { getWidgetConfig } = await getConfigStore();
+      config = await getWidgetConfig(projectId);
+      
+      try {
+        const { setCachedConfig } = await import("../storage/redisCache.js");
+        await setCachedConfig(projectId, config, 300);
+      } catch (error) {
+        // Redis not available
+      }
+    }
 
-    // Return empty config if not found (widget will use defaults)
+    if (config && config.agent_name) {
+      const camelCaseConfig = {
+        projectId: config.project_id || config.projectId,
+        agentName: config.agent_name || config.agentName,
+        avatarUrl: config.avatar_url || config.avatarUrl,
+        primaryColor: config.primary_color || config.primaryColor,
+        followupMessage: config.followup_message || config.followupMessage,
+        bhkPrompt: config.bhk_prompt || config.bhkPrompt,
+        inventoryMessage: config.inventory_message || config.inventoryMessage,
+        phonePrompt: config.phone_prompt || config.phonePrompt,
+        thankYouMessage: config.thank_you_message || config.thankYouMessage,
+        bubblePosition: config.bubble_position || config.bubblePosition,
+        autoOpenDelayMs: config.auto_open_delay_ms || config.autoOpenDelayMs,
+        welcomeMessage: config.welcome_message || config.welcomeMessage,
+        propertyInfo: config.property_info || config.propertyInfo || {},
+      };
+      return res.json(camelCaseConfig);
+    }
+
     res.json(config || {});
   } catch (error) {
     logger.error("Failed to fetch widget config", error);
-    // Return empty config instead of error - widget will use defaults
-    res.status(200).json({});
+    res.status(200).json({
+      projectId: projectId,
+      agentName: 'Riya from Homesfy',
+      avatarUrl: 'https://cdn.homesfy.com/assets/riya-avatar.png',
+      primaryColor: '#6158ff',
+      followupMessage: 'Sure… I\'ll send that across right away!',
+      bhkPrompt: 'Which configuration you are looking for?',
+      inventoryMessage: 'That\'s cool… we have inventory available with us.',
+      phonePrompt: 'Please enter your mobile number...',
+      thankYouMessage: 'Thanks! Our expert will call you shortly 📞',
+      bubblePosition: 'bottom-right',
+      autoOpenDelayMs: 4000,
+      welcomeMessage: 'Hi, I\'m Riya from Homesfy 👋\nHow can I help you today?',
+      propertyInfo: {}
+    });
   }
 });
 
-// POST requires API key authentication - protects config updates
 router.post("/:projectId", requireApiKey, async (req, res) => {
   try {
     const { projectId } = req.params;
     const update = req.body;
 
     const { updateWidgetConfig } = await getConfigStore();
-
-    // If using MongoDB, update directly (works on Vercel too!)
-    if (config.dataStore === "mongodb") {
-      const updatedConfig = await updateWidgetConfig(projectId, update);
-      return res.json(updatedConfig);
-    }
-
-    // File storage: On Vercel (read-only filesystem), we can't write files
-    if (process.env.VERCEL) {
-      return res.status(200).json({
-        message: "Config update received. On Vercel with file storage, config is read-only from git.",
-        instruction: "Set MONGODB_URI environment variable to enable database storage, or update apps/api/data/widget-config.json locally, commit, and push to deploy.",
-        receivedUpdate: update,
-        projectId
-      });
-    }
-
-    // Local development: update file directly
     const updatedConfig = await updateWidgetConfig(projectId, update);
+    
+    try {
+      const { invalidateConfigCache } = await import("../storage/redisCache.js");
+      await invalidateConfigCache(projectId);
+    } catch (error) {
+      // Redis not available
+    }
+    
     res.json(updatedConfig);
   } catch (error) {
     logger.error("Failed to update widget config", error);
-    
-    // Return error details (sanitized)
-    const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
-    const errorResponse = {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    res.status(500).json({
       message: "Widget config update failed",
       error: isDevelopment ? error.message : "Internal server error",
-    };
-    
-    res.status(200).json(errorResponse);
+      stack: isDevelopment ? error.stack : undefined
+    });
   }
 });
 

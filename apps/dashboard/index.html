@@ -10,8 +10,8 @@
           (typeof window !== "undefined" && window.__HOMESFY_API_BASE_URL) ||
           (typeof globalThis !== "undefined" &&
             globalThis.__HOMESFY_API_BASE_URL);
-        window.__HOMESFY_API_BASE_URL =
-          existing || "https://api-825pnmuvj-fahimkhan-gits-projects.vercel.app";
+        // API URL should be set via VITE_API_BASE_URL during build
+        window.__HOMESFY_API_BASE_URL = existing || "";
       })();
     </script>
   </head>

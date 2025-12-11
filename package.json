@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "bash start-dev.sh",
+    "dev": "concurrently -n \"API,DASHBOARD,WIDGET\" -c \"blue,green,yellow\" \"npm run dev:api\" \"npm run dev:dashboard\" \"npm run dev:widget\"",
+    "start": "npm run dev",
     "dev:api": "cd apps/api && npm run dev",
     "dev:dashboard": "cd apps/dashboard && npm run dev",
     "dev:widget": "cd apps/widget && npm run dev",

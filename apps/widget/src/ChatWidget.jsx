@@ -100,19 +100,22 @@ function formatMessageTime(timestamp) {
 }
 
 function resolveAvatarUrl(raw) {
-  if (raw === undefined) {
+  if (raw === undefined || raw === null) {
+    console.warn("HomesfyChat: avatarUrl is undefined/null, using default");
     return DEFAULT_AVATAR_URL;
-  }
-
-  if (raw === null) {
-    return "";
   }
 
   if (typeof raw === "string") {
     const trimmed = raw.trim();
+    if (trimmed === "" || trimmed === "null" || trimmed === "undefined") {
+      console.warn("HomesfyChat: avatarUrl is empty string, using default");
+      return DEFAULT_AVATAR_URL;
+    }
+    console.log("HomesfyChat: ✅ Using avatarUrl:", trimmed);
     return trimmed;
   }
 
+  console.warn("HomesfyChat: avatarUrl is not a string, using default");
   return DEFAULT_AVATAR_URL;
 }
 
@@ -621,9 +624,24 @@ export function ChatWidget({
 
   const bhkOptions = BHK_OPTIONS;
 
-  const [avatarUrl, setAvatarUrl] = useState(
-    resolvedTheme.avatarUrl || DEFAULT_AVATAR_URL
-  );
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    const initialUrl = resolvedTheme.avatarUrl || DEFAULT_AVATAR_URL;
+    const separator = initialUrl.includes('?') ? '&' : '?';
+    return initialUrl + separator + `_cb=${Date.now()}`;
+  });
+
+  useEffect(() => {
+    const nextUrl = resolveAvatarUrl(resolvedTheme.avatarUrl);
+    const currentBaseUrl = avatarUrl.split('?')[0].split('&')[0];
+    const nextBaseUrl = nextUrl.split('?')[0].split('&')[0];
+    
+    if (nextBaseUrl !== currentBaseUrl) {
+      const separator = nextUrl.includes('?') ? '&' : '?';
+      const urlWithCacheBust = nextUrl + separator + `_cb=${Date.now()}`;
+      console.log("HomesfyChat: 🖼️ Updating avatar URL:", nextUrl);
+      setAvatarUrl(urlWithCacheBust);
+    }
+  }, [resolvedTheme.avatarUrl]);
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -658,11 +676,6 @@ export function ChatWidget({
       setVisibleCtaCount(ctaOptions.length);
     }
   }, [isOpen, selectedCta, isMobile, ctaOptions.length]);
-
-  useEffect(() => {
-    const nextUrl = resolvedTheme.avatarUrl || DEFAULT_AVATAR_URL;
-    setAvatarUrl(nextUrl);
-  }, [resolvedTheme.avatarUrl]);
 
   const handleAvatarError = useCallback((event) => {
     if (event?.currentTarget?.dataset?.fallbackApplied === "true") {

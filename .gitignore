@@ -14,6 +14,13 @@ env.example
 .env.production
 .env.test
 
+# Specific .env files in apps directories
+apps/api/.env
+apps/dashboard/.env
+apps/widget/.env
+apps/**/.env
+apps/**/.env.*
+
 # Sensitive data files
 **/data/*.json
 **/data/chat-sessions.json
@@ -21,6 +28,10 @@ env.example
 **/data/leads.json
 **/data/widget-config.json
 homesfy-chat-buddy/apps/api/data/*.json
+
+# Uploaded files
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
 
 # API keys and secrets (but NOT config.js files - those are source code)
 # Only ignore files that actually contain hardcoded secrets

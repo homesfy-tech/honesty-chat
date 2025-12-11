@@ -50,9 +50,10 @@ const envDefaultProjectId =
     : undefined;
 
 // Cache for widget theme to prevent repeated fetches
-// Very short cache (2 seconds) to ensure widget always gets latest config
+// Very short cache (1 second) to ensure widget always gets latest config
 const themeCache = new Map();
-const CACHE_DURATION_MS = 2 * 1000; // 2 seconds (ensures latest config while preventing excessive requests)
+const CACHE_DURATION_MS = 1 * 1000; // 1 second (ensures latest config while preventing excessive requests)
+const CONFIG_POLL_INTERVAL_MS = 3 * 1000; // Poll every 3 seconds for real-time updates
 
 // Function to clear cache (useful for forcing fresh config)
 function clearThemeCache() {
@@ -84,17 +85,13 @@ async function fetchWidgetTheme(apiBaseUrl, projectId, forceRefresh = false) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
-    // ALWAYS add timestamp to bypass browser cache and ensure latest config
-    // This ensures we get the latest config from the server every time
     const timestamp = Date.now();
     const response = await fetch(
       `${apiBaseUrl}/api/widget-config/${encodeURIComponent(projectId)}?t=${timestamp}&_=${timestamp}`,
       {
         signal: controller.signal,
-        credentials: 'omit', // Don't send credentials
-        // Don't send custom headers - they trigger CORS preflight and aren't needed
-        // cache: 'no-store' already prevents browser caching
-        cache: 'no-store', // Always fetch fresh from server, never use browser cache
+        credentials: 'omit',
+        cache: 'no-store',
       }
     );
     
@@ -103,12 +100,32 @@ async function fetchWidgetTheme(apiBaseUrl, projectId, forceRefresh = false) {
     if (!response.ok) {
       throw new Error(`Failed to load widget config for ${projectId}`);
     }
-    const data = await response.json();
+    let data = await response.json();
+    
+    // Convert snake_case to camelCase if needed (for backward compatibility)
+    if (data && data.agent_name && !data.agentName) {
+      data = {
+        projectId: data.project_id || data.projectId,
+        agentName: data.agent_name || data.agentName,
+        avatarUrl: data.avatar_url || data.avatarUrl,
+        primaryColor: data.primary_color || data.primaryColor,
+        followupMessage: data.followup_message || data.followupMessage,
+        bhkPrompt: data.bhk_prompt || data.bhkPrompt,
+        inventoryMessage: data.inventory_message || data.inventoryMessage,
+        phonePrompt: data.phone_prompt || data.phonePrompt,
+        thankYouMessage: data.thank_you_message || data.thankYouMessage,
+        bubblePosition: data.bubble_position || data.bubblePosition,
+        autoOpenDelayMs: data.auto_open_delay_ms || data.autoOpenDelayMs,
+        welcomeMessage: data.welcome_message || data.welcomeMessage,
+        propertyInfo: data.property_info || data.propertyInfo || {},
+      };
+    }
+    
     // Cache the result with timestamp
     const cacheTimestamp = Date.now();
     themeCache.set(cacheKey, { data, timestamp: cacheTimestamp });
-    console.log("HomesfyChat: ✅ Latest config loaded from server and cached (will refresh in 10 seconds)");
-    console.log("HomesfyChat: 📋 Config timestamp:", new Date(cacheTimestamp).toISOString());
+    console.log("HomesfyChat: ✅ Latest config loaded from server and cached");
+    console.log("HomesfyChat: 📋 Config:", { agentName: data.agentName, primaryColor: data.primaryColor });
     return data;
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -271,57 +288,128 @@ async function mountWidget({
   // Create React root once
   const root = ReactDOM.createRoot(mountNode);
   
-  // Store current props to detect changes
-  // projectId is stored here for lead submission (different projects = different CRM entries)
-  // theme is shared widget design (same for all projects)
   let currentProps = {
     apiBaseUrl,
-    projectId, // Used for lead submission to CRM
+    projectId,
     microsite,
-    theme, // Shared widget design config
+    theme,
     onEvent: eventDispatcher,
   };
 
-  // Initial render - use stable key that doesn't depend on projectId
-  // Pass preserved state to widget to restore state across re-renders
   root.render(
     <ChatWidget
-      key={WIDGET_INSTANCE_KEY} // Stable key - same for all project IDs
+      key={WIDGET_INSTANCE_KEY}
       apiBaseUrl={apiBaseUrl}
-      projectId={projectId} // Pass projectId only for lead submission
+      projectId={projectId}
       microsite={microsite}
       theme={theme}
       onEvent={eventDispatcher}
-      preservedState={widgetStateStore} // Pass preserved state
+      preservedState={widgetStateStore}
     />
   );
 
+  // Polling state
+  let configPollInterval = null;
+  
   const instance = {
     root,
     host,
     mountNode,
     updateTheme(newTheme) {
-      // Update theme without remounting
-      // CRITICAL: Only update if theme actually changed (deep comparison)
-      // This prevents unnecessary re-renders that could reset widget state
-      if (newTheme && JSON.stringify(newTheme) !== JSON.stringify(currentProps.theme)) {
-        console.log("HomesfyChat: Updating widget theme without remounting");
-        currentProps.theme = newTheme;
-        // Preserve state when re-rendering
-        root.render(
-          <ChatWidget
-            key={WIDGET_INSTANCE_KEY}
-            apiBaseUrl={currentProps.apiBaseUrl}
-            projectId={currentProps.projectId} // Keep current projectId for lead submission
-            microsite={currentProps.microsite}
-            theme={newTheme}
-            onEvent={currentProps.onEvent}
-            preservedState={widgetStateStore} // Pass preserved state
-          />
-        );
-      } else {
-        console.log("HomesfyChat: Theme update skipped - no changes detected");
+      if (newTheme) {
+        const currentTheme = currentProps.theme || {};
+        const hasChanges = 
+          newTheme.agentName !== currentTheme.agentName ||
+          newTheme.avatarUrl !== currentTheme.avatarUrl ||
+          newTheme.primaryColor !== currentTheme.primaryColor ||
+          newTheme.welcomeMessage !== currentTheme.welcomeMessage ||
+          JSON.stringify(newTheme) !== JSON.stringify(currentTheme);
+        
+        if (hasChanges) {
+          console.log("HomesfyChat: 🎨 Updating widget theme");
+          currentProps.theme = newTheme;
+          root.render(
+            <ChatWidget
+              key={WIDGET_INSTANCE_KEY}
+              apiBaseUrl={currentProps.apiBaseUrl}
+              projectId={currentProps.projectId}
+              microsite={currentProps.microsite}
+              theme={newTheme}
+              onEvent={currentProps.onEvent}
+              preservedState={widgetStateStore}
+            />
+          );
+        }
       }
+    },
+    startConfigPolling() {
+      if (configPollInterval) return; // Already polling
+      
+      configPollInterval = setInterval(async () => {
+        try {
+          // Determine project ID based on environment
+          const configProjectId = (() => {
+            if (typeof window !== 'undefined') {
+              const hostname = window.location.hostname;
+              if (hostname === 'localhost' || hostname === '127.0.0.1' || apiBaseUrl?.includes('localhost')) {
+                return 'local'; // Local development
+              }
+            }
+            return 'default'; // Production
+          })();
+          
+          const freshTheme = await fetchWidgetTheme(apiBaseUrl, configProjectId, true);
+          
+          if (freshTheme !== null && freshTheme !== undefined) {
+            const normalizeTheme = (theme) => {
+              const normalized = {};
+              for (const [key, value] of Object.entries(theme)) {
+                if (value !== undefined && value !== null) {
+                  normalized[key] = value;
+                }
+              }
+              return normalized;
+            };
+            
+            const currentNormalized = normalizeTheme(currentProps.theme || {});
+            const freshNormalized = normalizeTheme(freshTheme);
+            
+            const currentThemeStr = JSON.stringify(currentNormalized);
+            const freshThemeStr = JSON.stringify(freshNormalized);
+            
+            const avatarChanged = currentNormalized.avatarUrl !== freshNormalized.avatarUrl;
+            const agentNameChanged = currentNormalized.agentName !== freshNormalized.agentName;
+            const colorChanged = currentNormalized.primaryColor !== freshNormalized.primaryColor;
+            
+            if (currentThemeStr !== freshThemeStr || avatarChanged || agentNameChanged || colorChanged) {
+              console.log("HomesfyChat: 🔄 Config updated detected");
+              instance.updateTheme(freshTheme);
+            }
+          }
+        } catch (error) {
+          console.warn("HomesfyChat: Config polling error (non-critical):", error);
+        }
+      }, CONFIG_POLL_INTERVAL_MS);
+      
+      console.log("HomesfyChat: ✅ Started config polling");
+    },
+    stopConfigPolling() {
+      if (configPollInterval) {
+        clearInterval(configPollInterval);
+        configPollInterval = null;
+        console.log("HomesfyChat: Stopped config polling");
+      }
+    },
+    destroy() {
+      instance.stopConfigPolling();
+      if (root) {
+        root.unmount();
+      }
+      if (host && host.parentNode) {
+        host.parentNode.removeChild(host);
+      }
+      mountedWidgets.delete(WIDGET_INSTANCE_KEY);
+      console.log("HomesfyChat: Widget destroyed");
     },
     updateProjectId(newProjectId) {
       // Update projectId for lead submission without remounting
@@ -355,20 +443,20 @@ async function mountWidget({
   };
 
   mountedWidgets.set(WIDGET_INSTANCE_KEY, instance);
-  console.log("HomesfyChat: Widget instance created - Project ID", projectId, "will be used for lead submission");
+  console.log("HomesfyChat: Widget instance created - Project ID", projectId);
+  
+  instance.startConfigPolling();
+  
   return instance;
 }
 
-// Global flag to prevent multiple init calls
 let initInProgress = false;
 
 async function init(options = {}) {
   try {
-    // CRITICAL: Check if widget is already mounted FIRST, before any async operations
-    // This prevents multiple initializations that could cause remounts
     if (mountedWidgets.has(WIDGET_INSTANCE_KEY)) {
       const existingInstance = mountedWidgets.get(WIDGET_INSTANCE_KEY);
-      console.log("HomesfyChat: Widget already initialized - skipping re-initialization to prevent reloads");
+      console.log("HomesfyChat: Widget already initialized");
       const scriptElement = options.element || document.currentScript;
       const projectId =
         options.projectId ||
@@ -378,14 +466,11 @@ async function init(options = {}) {
         scriptElement?.getAttribute('data-project-id') ||
         envDefaultProjectId ||
         "default";
-      // Update projectId in existing instance for lead submission (if changed)
       if (existingInstance.updateProjectId && projectId) {
         existingInstance.updateProjectId(projectId);
       }
       return existingInstance;
     }
-    
-    // CRITICAL: Prevent concurrent init calls
     if (initInProgress) {
       console.log("HomesfyChat: Init already in progress, skipping duplicate call to prevent reloads");
       // Wait for the existing init to complete
@@ -437,16 +522,11 @@ async function init(options = {}) {
   const isHttpsSite = window.location.protocol === 'https:';
   const isLocalhost = apiBaseUrl && (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1'));
   
-  // Production API URL (stable domain)
-  const PRODUCTION_API_URL = "https://api-three-pearl.vercel.app";
-  
-  if (isHttpsSite && isLocalhost) {
-    console.error("HomesfyChat: ERROR - localhost API detected on HTTPS site! Forcing production API.");
-    apiBaseUrl = PRODUCTION_API_URL;
-    console.warn("HomesfyChat: Forced to production API:", apiBaseUrl);
+  if (isHttpsSite && isLocalhost && !apiBaseUrl) {
+    console.error("HomesfyChat: ERROR - localhost API detected on HTTPS site!");
+    console.warn("HomesfyChat: Please set data-api-base-url attribute or VITE_API_BASE_URL");
   }
   
-  // If no API URL provided, determine based on current site
   if (!apiBaseUrl) {
     const isLocalDev = window.location.hostname === 'localhost' || 
                        window.location.hostname === '127.0.0.1' ||
@@ -454,34 +534,30 @@ async function init(options = {}) {
                        window.location.hostname === '';
     
     if (isLocalDev && window.location.protocol === 'http:') {
-      // Only use localhost for actual local development (localhost + HTTP)
       apiBaseUrl = "http://localhost:4000";
       console.log("HomesfyChat: Using localhost API for local development:", apiBaseUrl);
       console.log("HomesfyChat: 💡 Tip: If API server isn't running, add data-api-base-url to use production API");
     } else {
-      // For ANY other site (production, staging, etc.), use production API
-      apiBaseUrl = PRODUCTION_API_URL;
-      console.log("HomesfyChat: Using production API (no API URL specified):", apiBaseUrl);
+      console.error("HomesfyChat: ERROR - No API URL specified!");
+      console.warn("HomesfyChat: Please set data-api-base-url attribute or VITE_API_BASE_URL");
     }
   }
   
-  // Final safety check - NEVER use localhost on non-localhost sites
   const currentHostname = window.location.hostname;
   const isActuallyLocalhost = currentHostname === 'localhost' || 
                                currentHostname === '127.0.0.1' ||
                                currentHostname === '';
   
   if (!isActuallyLocalhost && apiBaseUrl && (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1'))) {
-    console.error("HomesfyChat: CRITICAL ERROR - localhost API detected on non-localhost site! Forcing production API.");
-    apiBaseUrl = PRODUCTION_API_URL;
-    console.warn("HomesfyChat: Final override to production API:", apiBaseUrl);
+    console.error("HomesfyChat: ERROR - localhost API detected on non-localhost site!");
+    console.warn("HomesfyChat: Please set data-api-base-url attribute or VITE_API_BASE_URL");
+    apiBaseUrl = null;
   }
   
-  // Additional check: If on HTTPS, NEVER use HTTP localhost
   if (window.location.protocol === 'https:' && apiBaseUrl && (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1'))) {
-    console.error("HomesfyChat: CRITICAL ERROR - localhost API detected on HTTPS site! Forcing production API.");
-    apiBaseUrl = PRODUCTION_API_URL;
-    console.warn("HomesfyChat: HTTPS override to production API:", apiBaseUrl);
+    console.error("HomesfyChat: ERROR - localhost API detected on HTTPS site!");
+    console.warn("HomesfyChat: Please set data-api-base-url attribute or VITE_API_BASE_URL");
+    apiBaseUrl = null;
   }
   
   console.log("HomesfyChat: Using API Base URL:", apiBaseUrl);
@@ -505,9 +581,21 @@ async function init(options = {}) {
   console.log("HomesfyChat: 🔄 Fetching latest widget config from server...");
   let remoteTheme = {};
   try {
+    // Determine project ID based on environment
+    // Local development uses "local", production uses "default"
+    const configProjectId = (() => {
+      if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || apiBaseUrl?.includes('localhost')) {
+          return 'local'; // Local development
+        }
+      }
+      return 'default'; // Production
+    })();
+    
     // Always fetch fresh config on page load (force refresh on initial load)
     // Cache is only 2 seconds to ensure latest config appears quickly
-    remoteTheme = await fetchWidgetTheme(apiBaseUrl, "default", true); // Force refresh on page load
+    remoteTheme = await fetchWidgetTheme(apiBaseUrl, configProjectId, true); // Force refresh on page load
     if (Object.keys(remoteTheme).length > 0) {
       console.log("HomesfyChat: ✅ Latest widget config loaded successfully from server");
       console.log("HomesfyChat: 📋 Config keys:", Object.keys(remoteTheme).join(', '));
@@ -802,13 +890,13 @@ if (typeof window !== "undefined") {
           window.HomesfyChatInitialized = true;
         } else {
           console.warn("HomesfyChat: ⚠️ Widget initialized but instance is invalid");
-          console.warn("HomesfyChat: 💡 Try manually: window.HomesfyChat.init({ projectId: '5717', apiBaseUrl: 'https://api-three-pearl.vercel.app', microsite: 'www.navi-mumbai-properties.com' })");
+          console.warn("HomesfyChat: 💡 Try manually: window.HomesfyChat.init({ projectId: '5717', apiBaseUrl: 'https://api.yourdomain.com', microsite: 'www.yourdomain.com' })");
           window.HomesfyChatInitialized = true; // Still mark as initialized to prevent retry loops
         }
       }).catch((error) => {
         console.error("HomesfyChat: ❌ Initialization error:", error);
         console.error("HomesfyChat: Error stack:", error.stack);
-        console.error("HomesfyChat: 💡 Try manually: window.HomesfyChat.init({ projectId: '5717', apiBaseUrl: 'https://api-three-pearl.vercel.app', microsite: 'www.navi-mumbai-properties.com' })");
+        console.error("HomesfyChat: 💡 Try manually: window.HomesfyChat.init({ projectId: '5717', apiBaseUrl: 'https://api.yourdomain.com' })");
         // Mark as initialized to prevent infinite retry loops
         window.HomesfyChatInitialized = true;
       });

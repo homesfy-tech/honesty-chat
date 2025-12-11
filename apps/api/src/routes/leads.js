@@ -8,24 +8,24 @@ const router = express.Router();
 
 // Helper functions to get the right storage modules
 async function getLeadStore() {
-  if (config.dataStore === "mongodb") {
-    return await import("../storage/mongoLeadStore.js");
+  if (config.dataStore === "postgresql") {
+    return await import("../storage/postgresLeadStore.js");
   } else {
     return await import("../storage/leadStore.js");
   }
 }
 
 async function getEventStore() {
-  if (config.dataStore === "mongodb") {
-    return await import("../storage/mongoEventStore.js");
+  if (config.dataStore === "postgresql") {
+    return await import("../storage/postgresEventStore.js");
   } else {
     return await import("../storage/eventStore.js");
   }
 }
 
 async function getSessionStore() {
-  if (config.dataStore === "mongodb") {
-    return await import("../storage/mongoChatSessionStore.js");
+  if (config.dataStore === "postgresql") {
+    return await import("../storage/postgresChatSessionStore.js");
   } else {
     return await import("../storage/chatSessionStore.js");
   }
@@ -156,6 +156,9 @@ router.post("/", async (req, res) => {
       };
     }
 
+    // Extract location from metadata if available
+    const location = metadataPayload?.location || metadataPayload?.visitor?.location || req.body.location || null;
+    
     const leadStore = await getLeadStore();
     const sessionStore = await getSessionStore();
     const eventStore = await getEventStore();
@@ -167,20 +170,22 @@ router.post("/", async (req, res) => {
       microsite,
       metadata: metadataPayload,
       conversation,
+      location,
     });
 
-    // Get lead ID (MongoDB uses _id, file storage uses id)
-    const leadId = lead._id ? lead._id.toString() : lead.id;
+    // Get lead ID (PostgreSQL uses id, file storage uses id)
+    const leadId = lead.id;
 
     try {
       await sessionStore.createChatSession({
         microsite,
-        projectId: metadata?.projectId,
+        projectId: metadataPayload?.projectId || metadata?.projectId,
         leadId: leadId,
         phone: normalizedPhone ?? sanitizedPhone,
         bhkType: normalizedBhk.type,
         conversation,
         metadata: metadataPayload,
+        location,
       });
     } catch (error) {
       logger.error("Failed to store chat session", error);
@@ -198,6 +203,7 @@ router.post("/", async (req, res) => {
         ...(normalizedBhk.numeric !== null &&
           normalizedBhk.numeric !== undefined && { bhk: normalizedBhk.numeric }),
       },
+      location,
     });
 
     res.status(201).json({ message: "Lead created", lead });

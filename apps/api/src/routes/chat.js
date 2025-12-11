@@ -210,7 +210,7 @@ router.post("/", async (req, res) => {
       response: "I'd love to help you with that! Share your name and phone so I can assist you better.",
       aiUsed: false,
       fallback: true,
-      error: process.env.NODE_ENV !== 'production' && !process.env.VERCEL ? error.message : undefined
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined
     });
   }
 });

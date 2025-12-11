@@ -4,26 +4,20 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 
-// Import config file directly for Vercel (ensures it's included in build)
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const configFilePath = path.resolve(moduleDir, "../../data/widget-config.json");
-// Also try from process.cwd() for Vercel
 const configFilePathAlt = path.resolve(process.cwd(), "data/widget-config.json");
 
 let widgetConfigData = null;
 function loadConfigFile() {
-  // On Vercel, the file structure is different - try multiple paths
   const cwd = process.cwd();
   const pathsToTry = [
-    // Try relative to module first (local dev)
     configFilePath,
-    // Try from various Vercel build locations
     path.join(cwd, "apps/api/data/widget-config.json"),
     path.join(cwd, "api/data/widget-config.json"),
     path.join(cwd, "data/widget-config.json"),
     path.join(cwd, "../data/widget-config.json"),
     path.join(cwd, "../../data/widget-config.json"),
-    // Fallback: try from process.cwd() root
     configFilePathAlt,
   ];
   
@@ -46,11 +40,10 @@ function loadConfigFile() {
   
   // If all paths failed, log detailed error (but don't throw - return null gracefully)
   console.warn("⚠️ Could not load config file from any path - using defaults");
-  if (process.env.NODE_ENV === 'development' || process.env.VERCEL) {
+  if (process.env.NODE_ENV === 'development') {
     console.warn("   Tried paths:", pathsToTry);
     console.warn("   Current working directory:", cwd);
     console.warn("   Module directory:", moduleDir);
-    console.warn("   Vercel environment:", !!process.env.VERCEL);
   }
   
   // Return null instead of throwing - let the caller handle it
@@ -74,28 +67,16 @@ const FILE_NAME = "widget-config.json";
 const DEFAULT_STORE = { configs: [] };
 
 async function loadStore() {
-  // CRITICAL: Always reload from file to ensure latest config
-  // On Vercel, the file is read-only from git, so we need to reload it on each request
-  // to get the latest deployed version (after git push + Vercel redeploy)
   const freshConfig = loadConfigFile();
   if (freshConfig) {
-    // Update the cached version with fresh data
     widgetConfigData = freshConfig;
-    if (process.env.VERCEL) {
-      console.log("🔄 Vercel: Reloaded config from file (ensures latest deployed config)");
-    } else {
-      console.log("🔄 Local dev: Reloaded config from file (changes will appear immediately)");
-    }
     return freshConfig;
   }
   
-  // Fallback: if file load failed, try cached version
   if (widgetConfigData) {
-    console.warn("⚠️ Using cached config (file load failed)");
     return widgetConfigData;
   }
   
-  // Last resort: try reading from file system (for local development)
   return readJson(FILE_NAME, DEFAULT_STORE);
 }
 
@@ -161,9 +142,6 @@ const lastLogTime = new Map();
 const LOG_INTERVAL_MS = 60000; // Only log once per minute per projectId
 
 export async function getWidgetConfig(projectId) {
-  // CRITICAL: Always reload from file (don't use cache)
-  // This ensures config changes appear immediately after git push + Vercel redeploy
-  // Clear cache to force fresh load from file
   configCache.delete(projectId);
   
   // Always reload store from file to get latest config
@@ -174,24 +152,13 @@ export async function getWidgetConfig(projectId) {
   const lastLog = lastLogTime.get(projectId) || 0;
   const shouldLog = (currentTime - lastLog) > LOG_INTERVAL_MS;
   
-  if (process.env.VERCEL && shouldLog) {
-    console.log(`📁 Store loaded: ${store.configs?.length || 0} configs found`);
-    console.log(`📁 Looking for projectId: ${projectId}`);
-    lastLogTime.set(projectId, currentTime);
-  }
-  
   const existing = store.configs.find((item) => item.projectId === projectId);
 
   if (existing) {
-    // Only log occasionally to reduce console spam
-    if (shouldLog || (!process.env.VERCEL && process.env.NODE_ENV !== 'production')) {
+    if (shouldLog || process.env.NODE_ENV !== 'production') {
       console.log(`✅ Found config for projectId: ${projectId}`);
-      if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
-        console.log(`📋 Config details: agentName="${existing.agentName}", primaryColor="${existing.primaryColor}"`);
-      }
     }
-    // Cache the result (only in production, local dev always reloads)
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production') {
       configCache.set(projectId, existing);
     }
     return existing;
@@ -212,7 +179,6 @@ export async function getWidgetConfig(projectId) {
 
   store.configs.push(config);
   await saveStore(store);
-  // Cache the newly created config
   configCache.set(projectId, config);
   return config;
 }
@@ -248,7 +214,6 @@ export async function upsertWidgetConfig(projectId, update) {
 
   store.configs[index] = updated;
   await saveStore(store);
-  // Update cache
   configCache.set(projectId, updated);
   return updated;
 }

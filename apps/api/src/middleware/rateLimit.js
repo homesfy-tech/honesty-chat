@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 
 // Check if we're in development mode
-const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 /**
  * General API Rate Limiter

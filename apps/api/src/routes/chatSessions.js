@@ -6,8 +6,8 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getSessionStore() {
-  if (config.dataStore === "mongodb") {
-    return await import("../storage/mongoChatSessionStore.js");
+  if (config.dataStore === "postgresql") {
+    return await import("../storage/postgresChatSessionStore.js");
   } else {
     return await import("../storage/chatSessionStore.js");
   }

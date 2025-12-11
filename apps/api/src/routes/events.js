@@ -6,8 +6,8 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getEventStore() {
-  if (config.dataStore === "mongodb") {
-    return await import("../storage/mongoEventStore.js");
+  if (config.dataStore === "postgresql") {
+    return await import("../storage/postgresEventStore.js");
   } else {
     return await import("../storage/eventStore.js");
   }
@@ -49,12 +49,22 @@ router.post("/", async (req, res) => {
     }
 
     const eventStore = await getEventStore();
-    const event = await eventStore.recordEvent({ type, projectId, microsite, payload });
+    
+    // Extract location from payload if available
+    const location = payload?.location || bodyData.location || null;
+    
+    const event = await eventStore.recordEvent({ 
+      type, 
+      projectId, 
+      microsite, 
+      payload: payload || bodyData.payload || {},
+      location
+    });
     res.status(201).json({ message: "Event recorded", event });
   } catch (error) {
     logger.error("Failed to record event", error);
     // Return 200 instead of 500 to prevent widget errors - events are not critical
-    const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+    const isDevelopment = process.env.NODE_ENV !== 'production';
     res.status(200).json({ message: "Event recording failed (non-critical)", error: isDevelopment ? error.message : undefined });
   }
 });

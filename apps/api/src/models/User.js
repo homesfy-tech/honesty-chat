@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt';
-import { query } from '../db/postgresql.js';
+import { query } from '../db/mysql.js';
 
 /**
- * User model for PostgreSQL
+ * User model for MySQL
  */
 export class User {
   /**
@@ -11,13 +11,14 @@ export class User {
   static async create({ username, password, email, role = 'user' }) {
     const passwordHash = await bcrypt.hash(password, 10);
     
-    const result = await query(
+    await query(
       `INSERT INTO users (username, password_hash, email, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, username, email, role, created_at, updated_at`,
+       VALUES (?, ?, ?, ?)`,
       [username, passwordHash, email, role]
     );
     
+    // MySQL doesn't support RETURNING, so fetch the inserted row
+    const result = await query('SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = LAST_INSERT_ID()', []);
     return result.rows[0];
   }
 
@@ -26,7 +27,7 @@ export class User {
    */
   static async findByUsername(username) {
     const result = await query(
-      'SELECT id, username, password_hash, email, role, created_at, updated_at FROM users WHERE username = $1',
+      'SELECT id, username, password_hash, email, role, created_at, updated_at FROM users WHERE username = ?',
       [username]
     );
     
@@ -38,7 +39,7 @@ export class User {
    */
   static async findById(id) {
     const result = await query(
-      'SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = ?',
       [id]
     );
     
@@ -69,19 +70,18 @@ export class User {
   static async update(id, updates) {
     const fields = [];
     const values = [];
-    let paramCount = 1;
 
     if (updates.email !== undefined) {
-      fields.push(`email = $${paramCount++}`);
+      fields.push(`email = ?`);
       values.push(updates.email);
     }
     if (updates.role !== undefined) {
-      fields.push(`role = $${paramCount++}`);
+      fields.push(`role = ?`);
       values.push(updates.role);
     }
     if (updates.password !== undefined) {
       const passwordHash = await bcrypt.hash(updates.password, 10);
-      fields.push(`password_hash = $${paramCount++}`);
+      fields.push(`password_hash = ?`);
       values.push(passwordHash);
     }
 
@@ -90,11 +90,13 @@ export class User {
     }
 
     values.push(id);
-    const result = await query(
-      `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING id, username, email, role, created_at, updated_at`,
+    await query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
       values
     );
 
+    // MySQL doesn't support RETURNING, so fetch the updated row
+    const result = await query('SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = ?', [id]);
     return result.rows[0] || null;
   }
 
@@ -102,8 +104,7 @@ export class User {
    * Delete user
    */
   static async delete(id) {
-    await query('DELETE FROM users WHERE id = $1', [id]);
+    await query('DELETE FROM users WHERE id = ?', [id]);
     return true;
   }
 }
-

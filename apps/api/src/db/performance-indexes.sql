@@ -1,4 +1,4 @@
--- Performance Optimization Indexes
+-- Performance Optimization Indexes for MySQL
 -- Run this to add additional indexes for better query performance
 -- Especially important for 1000+ microsites and high traffic
 
@@ -14,10 +14,10 @@ ON leads(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_microsite_status 
 ON leads(microsite, status);
 
--- Index for project ID lookups in metadata (JSONB)
--- This allows fast queries on metadata->>'projectId'
-CREATE INDEX IF NOT EXISTS idx_leads_metadata_project_id 
-ON leads USING GIN ((metadata->>'projectId'));
+-- Note: MySQL doesn't support GIN indexes for JSON (PostgreSQL feature)
+-- For JSON queries, consider adding generated columns or use JSON_EXTRACT in queries
+-- Example: ALTER TABLE leads ADD COLUMN project_id_extracted VARCHAR(255) AS (JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.projectId'))) STORED;
+-- Then: CREATE INDEX idx_leads_project_id_extracted ON leads(project_id_extracted);
 
 -- Composite index for chat sessions (project + date)
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_project_created 
@@ -35,23 +35,15 @@ ON events(project_id, type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_microsite_created 
 ON events(microsite, created_at DESC);
 
--- Partial index for active leads (status = 'new' or 'contacted')
+-- Note: MySQL 8.0+ supports functional indexes, but older versions don't support partial indexes
+-- For MySQL 5.7, we can't create partial indexes with WHERE clause
+-- The following would work in MySQL 8.0+:
+-- CREATE INDEX idx_leads_active ON leads(created_at DESC) WHERE status IN ('new', 'contacted');
+
+-- For MySQL 5.7 compatibility, create regular indexes instead:
 CREATE INDEX IF NOT EXISTS idx_leads_active 
-ON leads(created_at DESC) 
-WHERE status IN ('new', 'contacted');
+ON leads(status, created_at DESC);
 
--- Partial index for recent leads (last 30 days)
--- This helps with dashboard queries showing recent activity
-CREATE INDEX IF NOT EXISTS idx_leads_recent 
-ON leads(created_at DESC) 
-WHERE created_at > NOW() - INTERVAL '30 days';
-
--- Index for phone number lookups (already exists, but ensure it's there)
--- CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
-
--- Analyze tables to update statistics (helps query planner)
-ANALYZE leads;
-ANALYZE chat_sessions;
-ANALYZE events;
-ANALYZE widget_configs;
-
+-- Update table statistics (MySQL equivalent of ANALYZE)
+-- Note: MySQL automatically updates statistics, but you can force update with:
+-- ANALYZE TABLE leads, chat_sessions, events, widget_configs;

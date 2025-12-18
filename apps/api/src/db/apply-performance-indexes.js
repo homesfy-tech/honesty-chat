@@ -5,7 +5,7 @@
  * Usage: node src/db/apply-performance-indexes.js
  */
 
-import { connectPostgreSQL, query } from './postgresql.js';
+import { connectMySQL, query } from './mysql.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,8 +15,8 @@ const __dirname = path.dirname(__filename);
 
 async function applyIndexes() {
   try {
-    console.log('🔗 Connecting to PostgreSQL...');
-    await connectPostgreSQL();
+    console.log('🔗 Connecting to MySQL...');
+    await connectMySQL();
     
     console.log('📊 Applying performance indexes...');
     const indexPath = path.join(__dirname, 'performance-indexes.sql');

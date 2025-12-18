@@ -7,14 +7,14 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getConfigStore() {
-  if (config.dataStore === "postgresql") {
+  if (config.dataStore === "mysql") {
     try {
-      const store = await import("../storage/postgresWidgetConfigStore.js");
+      const store = await import("../storage/mysqlWidgetConfigStore.js");
       return {
         getWidgetConfig: store.getWidgetConfig,
       };
     } catch (error) {
-      logger.error("Failed to load PostgreSQL store, falling back to file store", error);
+      logger.error("Failed to load MySQL store, falling back to file store", error);
       // Fall through to file store
     }
   }

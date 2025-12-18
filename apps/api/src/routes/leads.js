@@ -8,24 +8,24 @@ const router = express.Router();
 
 // Helper functions to get the right storage modules
 async function getLeadStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresLeadStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlLeadStore.js");
   } else {
     return await import("../storage/leadStore.js");
   }
 }
 
 async function getEventStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresEventStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlEventStore.js");
   } else {
     return await import("../storage/eventStore.js");
   }
 }
 
 async function getSessionStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresChatSessionStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlChatSessionStore.js");
   } else {
     return await import("../storage/chatSessionStore.js");
   }
@@ -173,7 +173,7 @@ router.post("/", async (req, res) => {
       location,
     });
 
-    // Get lead ID (PostgreSQL uses id, file storage uses id)
+    // Get lead ID (MySQL uses id, file storage uses id)
     const leadId = lead.id;
 
     try {
@@ -215,7 +215,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const { microsite, search, startDate, endDate, limit = 50, skip = 0 } =
+    const { microsite, search, startDate, endDate, limit, skip } =
       req.query;
     const leadStore = await getLeadStore();
     const { items, total } = await leadStore.listLeads({
@@ -223,14 +223,14 @@ router.get("/", async (req, res) => {
       search,
       startDate,
       endDate,
-      limit,
-      skip,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      skip: skip ? parseInt(skip, 10) : undefined,
     });
 
     res.json({ items, total });
   } catch (error) {
     logger.error("Failed to list leads", error);
-    res.status(500).json({ message: "Failed to list leads" });
+    res.status(500).json({ message: "Failed to list leads", error: error.message });
   }
 });
 

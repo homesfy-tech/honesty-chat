@@ -6,8 +6,8 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getEventStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresEventStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlEventStore.js");
   } else {
     return await import("../storage/eventStore.js");
   }

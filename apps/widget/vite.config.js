@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { resolve } from "path";
 
 export default defineConfig({
   plugins: [react()],
@@ -10,7 +11,13 @@ export default defineConfig({
     cors: {
       origin: "*",
     },
+    // Serve built widget.js from dist folder
+    fs: {
+      allow: ['..'],
+    },
   },
+  // Add publicDir to serve dist files
+  publicDir: false,
   preview: {
     host: "0.0.0.0",
     port: 4173,

@@ -55,12 +55,12 @@ async function bootstrap() {
       }
     }
 
-    // Initialize database connection (PostgreSQL)
+    // Initialize database connection (MySQL)
     let storageType = "file";
-    if (process.env.DATABASE_URL || process.env.POSTGRESQL_URI) {
+    if (process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI) {
       try {
-        const { connectPostgreSQL, initializeSchema } = await import("./db/postgresql.js");
-        await connectPostgreSQL();
+        const { connectMySQL, initializeSchema } = await import("./db/mysql.js");
+        await connectMySQL();
         
         // Initialize schema if needed (only in development or first run)
         if (process.env.INIT_DB_SCHEMA === 'true' || process.env.NODE_ENV !== 'production') {
@@ -72,8 +72,8 @@ async function bootstrap() {
           }
         }
         
-        storageType = "postgresql";
-        logger.log("✅ Using PostgreSQL for data storage");
+        storageType = "mysql";
+        logger.log("✅ Using MySQL for data storage");
         
         // Initialize Redis cache (optional)
         try {
@@ -83,9 +83,9 @@ async function bootstrap() {
           logger.log("ℹ️  Redis caching not available (optional)");
         }
       } catch (error) {
-        logger.error("❌ Failed to connect to PostgreSQL:", error);
+        logger.error("❌ Failed to connect to MySQL:", error);
         if (process.env.NODE_ENV === 'production') {
-          logger.error("⚠️ Production mode requires PostgreSQL - some features may not work");
+          logger.error("⚠️ Production mode requires MySQL - some features may not work");
         } else {
           logger.log("⚠️ Falling back to file-based storage");
         }
@@ -325,6 +325,35 @@ async function bootstrap() {
       });
     }
     
+    // Serve widget files from widget dist folder
+    const widgetDistPath = path.join(process.cwd(), "..", "widget", "dist");
+    app.get("/apps/widget/dist/:filename", (req, res) => {
+      try {
+        const filename = req.params.filename;
+        const filePath = path.join(widgetDistPath, filename);
+        
+        // Security: ensure the file is within the widget dist directory
+        const resolvedPath = path.resolve(filePath);
+        const resolvedWidgetPath = path.resolve(widgetDistPath);
+        if (!resolvedPath.startsWith(resolvedWidgetPath)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
+        // Set proper content type
+        if (filename.endsWith('.js')) {
+          res.setHeader('Content-Type', 'application/javascript');
+        } else if (filename.endsWith('.css')) {
+          res.setHeader('Content-Type', 'text/css');
+        }
+        
+        // Send the file
+        res.sendFile(resolvedPath);
+      } catch (error) {
+        logger.error("Failed to serve widget file", error);
+        res.status(404).json({ error: "File not found" });
+      }
+    });
+
     // Serve static files (uploads)
     // Custom route to handle URL-encoded filenames properly
     // This must be registered BEFORE any other /uploads routes

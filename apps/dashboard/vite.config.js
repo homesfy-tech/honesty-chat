@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      host: "0.0.0.0", // Listen on all interfaces (IPv4 and IPv6)
       port: 5173,
       hmr: false, // Disable Hot Module Replacement to prevent auto-reloads
       proxy: {

@@ -30,7 +30,19 @@ export const logger = {
         }
         if (typeof arg === 'object') {
           // Remove sensitive fields
-          const { password, token, apiKey, ...safe } = arg;
+          const sensitiveFields = [
+            'password', 'token', 'apiKey', 'authorization', 'creditCard', 'ssn',
+            'phone', 'phoneNumber', 'number', 'mobile', 'telephone',
+            'name', 'userName', 'fullName', 'firstName', 'lastName',
+            'email', 'emailAddress',
+            'conversation', 'messages', 'chat', 'payload', 'metadata'
+          ];
+          const safe = { ...arg };
+          sensitiveFields.forEach(field => {
+            if (safe[field]) {
+              safe[field] = '***REDACTED***';
+            }
+          });
           return safe;
         }
         return arg;
@@ -86,10 +98,29 @@ function sanitizeRequestBody(body) {
   const sanitized = { ...body };
   
   // Remove sensitive fields
-  const sensitiveFields = ['password', 'token', 'apiKey', 'authorization', 'creditCard', 'ssn'];
+  const sensitiveFields = [
+    'password', 'token', 'apiKey', 'authorization', 'creditCard', 'ssn',
+    'phone', 'phoneNumber', 'number', 'mobile', 'telephone',
+    'name', 'userName', 'fullName', 'firstName', 'lastName',
+    'email', 'emailAddress',
+    'conversation', 'messages', 'chat', 'payload', 'metadata'
+  ];
+  
   sensitiveFields.forEach(field => {
     if (sanitized[field]) {
       sanitized[field] = '***REDACTED***';
+    }
+  });
+  
+  // Recursively sanitize nested objects
+  Object.keys(sanitized).forEach(key => {
+    if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
+      sanitized[key] = sanitizeRequestBody(sanitized[key]);
+    } else if (Array.isArray(sanitized[key])) {
+      // Sanitize array items if they're objects
+      sanitized[key] = sanitized[key].map(item => 
+        typeof item === 'object' && item !== null ? sanitizeRequestBody(item) : item
+      );
     }
   });
   

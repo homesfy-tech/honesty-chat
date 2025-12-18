@@ -124,8 +124,10 @@ async function fetchWidgetTheme(apiBaseUrl, projectId, forceRefresh = false) {
     // Cache the result with timestamp
     const cacheTimestamp = Date.now();
     themeCache.set(cacheKey, { data, timestamp: cacheTimestamp });
-    console.log("HomesfyChat: ✅ Latest config loaded from server and cached");
-    console.log("HomesfyChat: 📋 Config:", { agentName: data.agentName, primaryColor: data.primaryColor });
+    if (process.env.NODE_ENV === 'development') {
+      console.log("HomesfyChat: ✅ Latest config loaded from server and cached");
+      console.log("HomesfyChat: 📋 Config:", { agentName: data.agentName, primaryColor: data.primaryColor });
+    }
     return data;
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -195,7 +197,9 @@ async function mountWidget({
   // Project ID is only used for lead submission (different projects = different CRM entries)
   if (mountedWidgets.has(WIDGET_INSTANCE_KEY)) {
     const existingInstance = mountedWidgets.get(WIDGET_INSTANCE_KEY);
-    console.log("HomesfyChat: Widget already mounted - skipping mount, updating project ID for lead submission:", projectId);
+    if (process.env.NODE_ENV === 'development') {
+      console.log("HomesfyChat: Widget already mounted - skipping mount, updating project ID for lead submission");
+    }
     // Update theme if it changed (but don't remount)
     if (existingInstance.updateTheme && theme) {
       existingInstance.updateTheme(theme);
@@ -415,7 +419,9 @@ async function mountWidget({
       // Update projectId for lead submission without remounting
       // This allows the same widget instance to handle leads for different projects
       if (newProjectId && newProjectId !== currentProps.projectId) {
-        console.log("HomesfyChat: Updating project ID for lead submission:", newProjectId);
+        if (process.env.NODE_ENV === 'development') {
+          console.log("HomesfyChat: Updating project ID for lead submission");
+        }
         currentProps.projectId = newProjectId;
         // Re-render with new projectId (only affects lead submission, widget design stays the same)
         // Preserve state when re-rendering
@@ -597,11 +603,13 @@ async function init(options = {}) {
     // Cache is only 2 seconds to ensure latest config appears quickly
     remoteTheme = await fetchWidgetTheme(apiBaseUrl, configProjectId, true); // Force refresh on page load
     if (Object.keys(remoteTheme).length > 0) {
-      console.log("HomesfyChat: ✅ Latest widget config loaded successfully from server");
-      console.log("HomesfyChat: 📋 Config keys:", Object.keys(remoteTheme).join(', '));
-      console.log("HomesfyChat: 👤 Agent Name:", remoteTheme.agentName || "NOT SET");
-      console.log("HomesfyChat: 🎨 Primary Color:", remoteTheme.primaryColor || "NOT SET");
-      console.log("HomesfyChat: 💬 Welcome Message:", remoteTheme.welcomeMessage?.substring(0, 50) || "NOT SET");
+      if (process.env.NODE_ENV === 'development') {
+        console.log("HomesfyChat: ✅ Latest widget config loaded successfully from server");
+        console.log("HomesfyChat: 📋 Config keys:", Object.keys(remoteTheme).join(', '));
+        console.log("HomesfyChat: 👤 Agent Name:", remoteTheme.agentName || "NOT SET");
+        console.log("HomesfyChat: 🎨 Primary Color:", remoteTheme.primaryColor || "NOT SET");
+        // Welcome message logging removed for privacy - could contain sensitive info
+      }
     } else {
       console.log("HomesfyChat: ⚠️ Using hardcoded default config (no remote config found)");
       console.log("HomesfyChat: 💡 Make sure API server is running and config file exists");

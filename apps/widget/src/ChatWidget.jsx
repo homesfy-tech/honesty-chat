@@ -991,10 +991,12 @@ export function ChatWidget({
   const isPhoneInputActive = currentStage === "name" && !phoneSubmitted; // Show phone field together with name
   const isLeadCaptureActive = isNameInputActive || isPhoneInputActive;
   
-  // Debug logging
+  // Debug logging (development only)
   useEffect(() => {
-    console.log("HomesfyChat: Current stage:", currentStage, "nameSubmitted:", nameSubmitted, "phoneSubmitted:", phoneSubmitted);
-    console.log("HomesfyChat: isNameInputActive:", isNameInputActive, "isPhoneInputActive:", isPhoneInputActive);
+    if (process.env.NODE_ENV === 'development') {
+      console.log("HomesfyChat: Current stage:", currentStage, "nameSubmitted:", nameSubmitted, "phoneSubmitted:", phoneSubmitted);
+      console.log("HomesfyChat: isNameInputActive:", isNameInputActive, "isPhoneInputActive:", isPhoneInputActive);
+    }
   }, [currentStage, isNameInputActive, isPhoneInputActive, nameSubmitted, phoneSubmitted]);
 
   const selectedCountryKey = countryOptionKey(
@@ -1083,7 +1085,9 @@ export function ChatWidget({
           // User typed full number with country code, use it and update selection
           candidateValue = `${explicitCountry.code}${subscriberDigits}`;
           setSelectedCountry(explicitCountry);
-          console.log("HomesfyChat: Detected country code in input, using:", explicitCountry.code);
+          if (process.env.NODE_ENV === 'development') {
+            console.log("HomesfyChat: Detected country code in input");
+          }
         }
       }
     }
@@ -1155,13 +1159,7 @@ export function ChatWidget({
       
       // Project ID is used for lead submission to CRM
       // Widget design uses shared config (same for all projects)
-      console.log("HomesfyChat: 📝 Submitting lead to CRM with project ID:", finalProjectId);
-      console.log("HomesfyChat: 📋 Project ID source:", {
-        fromProp: projectId || "Not found",
-        fromUrl: projectIdFromUrl || "Not found",
-        fromData: projectIdFromData || "Not found",
-        final: finalProjectId
-      });
+      // Removed sensitive logging - project ID logging removed for privacy
 
       // Get magnet_id from URL if present
       const magnetId = urlParams.get("magnet_id");
@@ -1215,7 +1213,7 @@ export function ChatWidget({
       // Use nameToUse which comes from parameter or state
       const leadName = nameToUse || userName || "Guest";
       
-      console.log("HomesfyChat: Preparing CRM payload - Name:", leadName, "Phone:", phoneNumber, "Country:", countryCode);
+      // Removed sensitive logging - name, phone, and country code logging removed for privacy
       
       const crmPayload = {
         name: leadName,
@@ -1255,7 +1253,7 @@ export function ChatWidget({
       // Send to Homesfy CRM API - always use production API
       const crmBaseUrl = "https://api.homesfy.in";
 
-      console.log("HomesfyChat: Sending lead to CRM:", JSON.stringify(crmPayload, null, 2));
+      // Removed sensitive logging - full CRM payload logging removed for privacy
 
       const crmResponse = await fetch(`${crmBaseUrl}/api/leads/create`, {
         method: "POST",
@@ -1266,8 +1264,11 @@ export function ChatWidget({
       });
 
       const responseText = await crmResponse.text();
-      console.log("HomesfyChat: CRM API Response Status:", crmResponse.status);
-      console.log("HomesfyChat: CRM API Response:", responseText.substring(0, 500));
+      // Removed sensitive logging - API response logging removed for privacy
+      // Only log status for debugging (non-sensitive)
+      if (process.env.NODE_ENV === 'development') {
+        console.log("HomesfyChat: CRM API Response Status:", crmResponse.status);
+      }
 
       if (!crmResponse.ok) {
         let errorMessage = `Failed to save lead to CRM (${crmResponse.status})`;
@@ -1275,10 +1276,16 @@ export function ChatWidget({
           if (responseText) {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.message || errorData.error || errorMessage;
-            console.error("HomesfyChat: CRM API Error:", errorData);
+            // Removed sensitive logging - only log error message, not full error data
+            if (process.env.NODE_ENV === 'development') {
+              console.error("HomesfyChat: CRM API Error:", errorMessage);
+            }
           }
         } catch (e) {
-          console.error("HomesfyChat: CRM API Error (non-JSON):", responseText.substring(0, 200));
+          // Removed sensitive logging - response text logging removed for privacy
+          if (process.env.NODE_ENV === 'development') {
+            console.error("HomesfyChat: CRM API Error (non-JSON)");
+          }
         }
         throw new Error(errorMessage);
       }
@@ -1286,9 +1293,14 @@ export function ChatWidget({
       // Parse successful response
       try {
         const responseData = JSON.parse(responseText);
-        console.log("HomesfyChat: ✅ Lead saved to CRM successfully:", responseData);
+        // Removed sensitive logging - response data logging removed for privacy
+        if (process.env.NODE_ENV === 'development') {
+          console.log("HomesfyChat: ✅ Lead saved to CRM successfully");
+        }
       } catch (e) {
-        console.log("HomesfyChat: ✅ Lead saved to CRM (response not JSON)");
+        if (process.env.NODE_ENV === 'development') {
+          console.log("HomesfyChat: ✅ Lead saved to CRM (response not JSON)");
+        }
       }
 
       // Also save to local API for dashboard tracking
@@ -1332,7 +1344,7 @@ export function ChatWidget({
       
       // Mark as complete
       setCurrentStage("complete");
-      console.log("HomesfyChat: ✅ Lead submitted successfully to CRM");
+      // Removed sensitive logging - success message removed to prevent data exposure
       
       trackEvent("lead_submitted", {
         name: userName,
@@ -1360,7 +1372,10 @@ export function ChatWidget({
 
       return true;
     } catch (err) {
-      console.error(err);
+      // Removed sensitive logging - only log error message, not full error object
+      if (process.env.NODE_ENV === 'development') {
+        console.error("HomesfyChat: Error submitting lead:", err.message);
+      }
       setError("We couldn't save your details. Please try again.");
       return false;
     }
@@ -1733,7 +1748,9 @@ export function ChatWidget({
                               if (error) {
                                 setError(null);
                               }
-                              console.log("HomesfyChat: Country code selected:", next.code, next.name);
+                              if (process.env.NODE_ENV === 'development') {
+                                console.log("HomesfyChat: Country code selected");
+                              }
                             }
                           }}
                           disabled={isTyping}

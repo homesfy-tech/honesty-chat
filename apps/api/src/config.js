@@ -14,13 +14,48 @@ const normalizedPort =
 const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI;
 
 let dataStore = "file";
-if (databaseUrl) {
+
+// Check if using individual MySQL variables (preferred method)
+const hasIndividualVars = process.env.MYSQL_HOST && process.env.MYSQL_USER;
+
+if (hasIndividualVars) {
+  // Using individual MySQL variables - assume MySQL storage
+  dataStore = "mysql";
+} else if (databaseUrl) {
   // Check if connection string is a placeholder/template (common placeholder values)
-  const isPlaceholder = databaseUrl.includes('username:password@host') || 
-                        databaseUrl.includes('user:pass@host') ||
-                        (databaseUrl.includes('@host:') && !databaseUrl.includes('localhost') && !databaseUrl.includes('127.0.0.1') && !databaseUrl.includes('.'));
+  const placeholderPatterns = [
+    'username:password@host',
+    'user:pass@host',
+    '@host:',
+    'mysql://host',
+    'mysql2://host',
+    'your-db-host',
+    'example.com',
+    'placeholder',
+    'your-host',
+    'localhost.local'
+  ];
   
-  if (!isPlaceholder) {
+  // Check for placeholder patterns in the connection string
+  const hasPlaceholderPattern = placeholderPatterns.some(pattern => 
+    databaseUrl.toLowerCase().includes(pattern.toLowerCase())
+  );
+  
+  // Also check if hostname looks like a placeholder after parsing
+  let hostnamePlaceholder = false;
+  if (databaseUrl.startsWith('mysql://') || databaseUrl.startsWith('mysql2://')) {
+    try {
+      const url = new URL(databaseUrl.replace(/^mysql2?:\/\//, 'http://'));
+      const hostname = url.hostname.toLowerCase();
+      hostnamePlaceholder = placeholderPatterns.some(pattern => 
+        hostname.includes(pattern.toLowerCase())
+      ) || hostname.includes('your-') || hostname.includes('example') || hostname.includes('placeholder');
+    } catch {
+      // If URL parsing fails, we'll handle it later
+    }
+  }
+  
+  if (!hasPlaceholderPattern && !hostnamePlaceholder) {
     dataStore = "mysql";
   }
 }

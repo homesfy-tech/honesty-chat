@@ -85,13 +85,13 @@ export async function listLeads(filters = {}) {
   const validSkip = isNaN(skip) ? 0 : Math.max(0, skip);
   const validLimit = isNaN(limit) ? 50 : Math.max(1, Math.min(1000, limit)); // Cap at 1000
   
-  // MySQL uses LIMIT offset, count
-  const limitParams = params.length > 0 ? [...params, validSkip, validLimit] : [validSkip, validLimit];
+  // MySQL LIMIT doesn't accept placeholders - must use literal integers
+  // Ensure values are safe integers (already validated above)
   const itemsResult = await query(
     `SELECT * FROM leads ${whereClause}
      ORDER BY created_at DESC
-     LIMIT ?, ?`,
-    limitParams
+     LIMIT ${validSkip}, ${validLimit}`,
+    params.length > 0 ? params : []
   );
 
   // Parse JSON fields

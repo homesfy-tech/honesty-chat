@@ -9,8 +9,12 @@ export function validateEnvironment() {
 
   // Required for production
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.DATABASE_URL && !process.env.MYSQL_URL && !process.env.MYSQL_URI) {
-      errors.push('DATABASE_URL, MYSQL_URL, or MYSQL_URI is required for production deployment');
+    // Check if using connection string OR individual MySQL variables
+    const hasConnectionString = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI;
+    const hasIndividualVars = process.env.MYSQL_HOST && process.env.MYSQL_USER;
+    
+    if (!hasConnectionString && !hasIndividualVars) {
+      errors.push('DATABASE_URL (or MYSQL_URL/MYSQL_URI) OR individual MYSQL_* variables (MYSQL_HOST, MYSQL_USER, etc.) are required for production deployment');
     }
     
     if (!process.env.WIDGET_CONFIG_API_KEY) {

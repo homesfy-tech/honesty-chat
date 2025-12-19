@@ -57,8 +57,12 @@ async function bootstrap() {
 
     // Initialize database connection (MySQL)
     let storageType = "file";
-    if (process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI) {
+    const hasDatabaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI;
+    const hasIndividualVars = process.env.MYSQL_HOST && process.env.MYSQL_USER;
+    
+    if (hasDatabaseUrl || hasIndividualVars) {
       try {
+        logger.log("🔗 Attempting to connect to MySQL...");
         const { connectMySQL, initializeSchema } = await import("./db/mysql.js");
         await connectMySQL();
         
@@ -104,6 +108,11 @@ async function bootstrap() {
     logger.log("📂 Working directory:", process.cwd());
 
     const app = express();
+    
+    // Trust proxy for correct IP detection (needed for Vite proxy and rate limiting)
+    // This allows Express to correctly identify localhost requests when behind a proxy
+    app.set('trust proxy', 1);
+    
     const expandedOrigins = config.allowedOrigins.includes("*")
       ? ["*"]
       : expandAllowedOrigins(config.allowedOrigins);
@@ -151,9 +160,17 @@ async function bootstrap() {
       logger.warn('   Install with: npm install compression');
     }
 
-    // HTTPS enforcement (production only)
+    // HTTPS enforcement (production only, skip localhost)
     if (process.env.NODE_ENV === 'production' && process.env.FORCE_HTTPS !== 'false') {
       app.use((req, res, next) => {
+        // Skip HTTPS enforcement for localhost (local development)
+        const hostname = req.headers.host?.split(':')[0] || req.hostname || '';
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+        
+        if (isLocalhost) {
+          return next(); // Skip HTTPS enforcement for localhost
+        }
+        
         // Check if request is already HTTPS or behind a proxy
         const isSecure = req.secure || 
                         req.headers['x-forwarded-proto'] === 'https' ||
@@ -166,7 +183,7 @@ async function bootstrap() {
         }
         next();
       });
-      logger.log('✅ HTTPS enforcement enabled');
+      logger.log('✅ HTTPS enforcement enabled (skipping localhost)');
     }
 
     app.use(express.json({ limit: '1mb' }));

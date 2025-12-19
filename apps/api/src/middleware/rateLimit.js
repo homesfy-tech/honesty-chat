@@ -18,8 +18,37 @@ export const apiLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   skip: (req) => {
-    // Skip rate limiting for localhost in development
-    return isDevelopment && (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1');
+    // Always skip rate limiting for localhost (regardless of NODE_ENV)
+    // This handles both direct connections and proxy connections (Vite proxy)
+    // With trust proxy enabled, req.ip will be correctly set
+    const ip = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '';
+    const hostname = req.headers.host?.split(':')[0] || '';
+    const forwardedFor = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || '';
+    
+    const isLocalhost = 
+      ip === '127.0.0.1' || 
+      ip === '::1' || 
+      ip === '::ffff:127.0.0.1' ||
+      ip === 'localhost' ||
+      forwardedFor === '127.0.0.1' ||
+      forwardedFor === '::1' ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('localhost:') ||
+      hostname.startsWith('127.0.0.1:');
+    
+    // Always skip for localhost (even in production mode for local development)
+    // This allows local testing without rate limit issues
+    if (isLocalhost) {
+      return true;
+    }
+    
+    // Additional check: if IP is missing or looks like localhost, skip
+    if (!ip || ip.includes('127.0.0.1') || ip.includes('localhost') || ip.includes('::1')) {
+      return true;
+    }
+    
+    return false;
   },
 });
 
@@ -27,6 +56,7 @@ export const apiLimiter = rateLimit({
  * Strict Rate Limiter for Config Updates
  * Limits each IP to 10 requests per 15 minutes (production)
  * Much higher limit in development for testing
+ * Always skips for localhost to allow development/testing
  */
 export const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -38,8 +68,37 @@ export const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for localhost in development
-    return isDevelopment && (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1');
+    // Always skip rate limiting for localhost (regardless of NODE_ENV)
+    // This handles both direct connections and proxy connections (Vite proxy)
+    // With trust proxy enabled, req.ip will be correctly set
+    const ip = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '';
+    const hostname = req.headers.host?.split(':')[0] || '';
+    const forwardedFor = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || '';
+    
+    const isLocalhost = 
+      ip === '127.0.0.1' || 
+      ip === '::1' || 
+      ip === '::ffff:127.0.0.1' ||
+      ip === 'localhost' ||
+      forwardedFor === '127.0.0.1' ||
+      forwardedFor === '::1' ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('localhost:') ||
+      hostname.startsWith('127.0.0.1:');
+    
+    // Always skip for localhost (even in production mode for local development)
+    // This allows local testing without rate limit issues
+    if (isLocalhost) {
+      return true;
+    }
+    
+    // Additional check: if IP is missing or looks like localhost, skip
+    if (!ip || ip.includes('127.0.0.1') || ip.includes('localhost') || ip.includes('::1')) {
+      return true;
+    }
+    
+    return false;
   },
 });
 

@@ -1,5 +1,25 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env file from multiple possible locations
+// Try current directory (apps/api) first, then parent directory
+const envPaths = [
+  path.join(__dirname, "..", "..", ".env"), // apps/api/.env
+  path.join(__dirname, "..", "..", "..", ".env"), // root/.env
+];
+
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    break; // Successfully loaded .env file
+  }
+}
+
+// Also try default location (current working directory)
 dotenv.config();
 
 const normalizedPort =

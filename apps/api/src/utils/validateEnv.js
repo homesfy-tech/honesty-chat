@@ -8,13 +8,29 @@ export function validateEnvironment() {
   const warnings = [];
 
   // Required for production
-  if (process.env.NODE_ENV === 'production') {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
     // Check if using connection string OR individual MySQL variables
-    const hasConnectionString = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI;
-    const hasIndividualVars = process.env.MYSQL_HOST && process.env.MYSQL_USER;
+    const hasConnectionString = !!(process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQL_URI);
+    const hasIndividualVars = !!(process.env.MYSQL_HOST && process.env.MYSQL_USER);
     
     if (!hasConnectionString && !hasIndividualVars) {
-      errors.push('DATABASE_URL (or MYSQL_URL/MYSQL_URI) OR individual MYSQL_* variables (MYSQL_HOST, MYSQL_USER, etc.) are required for production deployment');
+      const missingVars = [];
+      if (!process.env.DATABASE_URL && !process.env.MYSQL_URL && !process.env.MYSQL_URI) {
+        missingVars.push('DATABASE_URL (or MYSQL_URL/MYSQL_URI)');
+      }
+      if (!process.env.MYSQL_HOST || !process.env.MYSQL_USER) {
+        missingVars.push('MYSQL_HOST and MYSQL_USER');
+      }
+      
+      errors.push(
+        `MySQL database connection is required for production deployment.\n` +
+        `Missing: ${missingVars.join(' OR ')}\n` +
+        `Options:\n` +
+        `  1. Set DATABASE_URL=mysql://user:password@host:port/database\n` +
+        `  2. OR set MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE`
+      );
     }
     
     if (!process.env.WIDGET_CONFIG_API_KEY) {
@@ -52,6 +68,17 @@ export function validateEnvironment() {
   if (errors.length > 0) {
     console.error('❌ Environment variable errors:');
     errors.forEach(error => console.error(`   - ${error}`));
+    
+    // Show what IS set (for debugging, without sensitive values)
+    console.log('\n📋 Current environment status:');
+    console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+    console.log(`   DATABASE_URL: ${process.env.DATABASE_URL ? '✓ set' : '✗ not set'}`);
+    console.log(`   MYSQL_URL: ${process.env.MYSQL_URL ? '✓ set' : '✗ not set'}`);
+    console.log(`   MYSQL_URI: ${process.env.MYSQL_URI ? '✓ set' : '✗ not set'}`);
+    console.log(`   MYSQL_HOST: ${process.env.MYSQL_HOST ? '✓ set' : '✗ not set'}`);
+    console.log(`   MYSQL_USER: ${process.env.MYSQL_USER ? '✓ set' : '✗ not set'}`);
+    console.log(`   MYSQL_DATABASE: ${process.env.MYSQL_DATABASE ? '✓ set' : '✗ not set'}`);
+    
     throw new Error(`Environment validation failed: ${errors.join('; ')}`);
   }
 

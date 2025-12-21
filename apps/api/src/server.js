@@ -462,8 +462,21 @@ async function bootstrap() {
     });
 
     // Start the server
-    server.listen(config.port, () => {
-      logger.log(`API server listening on port ${config.port}`);
+    // Bind to 0.0.0.0 to listen on all interfaces (allows connections from localhost and network)
+    server.listen(config.port, '0.0.0.0', () => {
+      logger.log(`✅ API server listening on http://0.0.0.0:${config.port}`);
+      logger.log(`   Local:   http://localhost:${config.port}`);
+      logger.log(`   Network: http://127.0.0.1:${config.port}`);
+    });
+    
+    // Handle server errors
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`❌ Port ${config.port} is already in use. Please stop the other process or change API_PORT.`);
+      } else {
+        logger.error(`❌ Server error:`, error);
+      }
+      process.exit(1);
     });
     
     return app;

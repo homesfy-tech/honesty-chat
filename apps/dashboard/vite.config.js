@@ -68,12 +68,34 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false, // Allow proxying to HTTP from HTTPS
           ws: true, // Enable WebSocket proxying
+          timeout: 30000, // 30 second timeout
           configure: (proxy, _options) => {
-            proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
+            proxy.on('error', (err, req, res) => {
+              console.error('❌ Vite Proxy Error:', err.message);
+              console.error('   Request URL:', req.url);
+              console.error('   Target:', _options.target);
+              console.error('   Possible causes:');
+              console.error('   1. API server not running on http://localhost:4000');
+              console.error('   2. API server not accessible from Vite dev server');
+              console.error('   3. Firewall blocking localhost connections');
+              
+              // Send error response to client
+              if (res && !res.headersSent) {
+                res.writeHead(502, {
+                  'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                  error: 'Proxy Error',
+                  message: 'Cannot connect to API server. Please ensure the API server is running on http://localhost:4000',
+                  details: err.message,
+                }));
+              }
             });
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log(`📡 Proxying: ${req.method} ${req.url} -> ${proxyReq.path}`);
+            });
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              console.log(`✅ Proxy Response: ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
             });
           },
         },

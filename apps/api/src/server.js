@@ -160,15 +160,21 @@ async function bootstrap() {
       logger.warn('   Install with: npm install compression');
     }
 
-    // HTTPS enforcement (production only, skip localhost)
+    // HTTPS enforcement (production only, skip localhost and direct IP access)
+    // Note: This server runs on HTTP only. SSL is handled by nginx reverse proxy.
+    // Only redirect if behind a proxy (nginx) that handles SSL termination.
     if (process.env.NODE_ENV === 'production' && process.env.FORCE_HTTPS !== 'false') {
       app.use((req, res, next) => {
         // Skip HTTPS enforcement for localhost (local development)
         const hostname = req.headers.host?.split(':')[0] || req.hostname || '';
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
         
-        if (isLocalhost) {
-          return next(); // Skip HTTPS enforcement for localhost
+        // Skip HTTPS enforcement for direct IP access (server doesn't have SSL certificates)
+        // Only enforce when behind nginx proxy (detected by x-forwarded-* headers)
+        const isBehindProxy = req.headers['x-forwarded-proto'] || req.headers['x-forwarded-for'];
+        
+        if (isLocalhost || !isBehindProxy) {
+          return next(); // Skip HTTPS enforcement for localhost or direct access
         }
         
         // Check if request is already HTTPS or behind a proxy
@@ -177,13 +183,13 @@ async function bootstrap() {
                         req.headers['x-forwarded-ssl'] === 'on';
         
         if (!isSecure && req.method === 'GET') {
-          // Redirect to HTTPS
+          // Redirect to HTTPS (only when behind proxy)
           const httpsUrl = `https://${req.headers.host}${req.url}`;
           return res.redirect(301, httpsUrl);
         }
         next();
       });
-      logger.log('✅ HTTPS enforcement enabled (skipping localhost)');
+      logger.log('✅ HTTPS enforcement enabled (only when behind proxy, skipping direct access)');
     }
 
     app.use(express.json({ limit: '1mb' }));
@@ -327,6 +333,29 @@ async function bootstrap() {
         res.json(getHealthCheck());
       });
       
+      // Add /api/health endpoint for dashboard and other clients
+      app.get("/api/health", (req, res) => {
+        res.json(getHealthCheck());
+      });
+      
+      // Add /api endpoint for API info
+      app.get("/api", (req, res) => {
+        res.json({
+          status: "ok",
+          message: "Homesfy Chat API",
+          version: "1.0.0",
+          endpoints: {
+            health: "/api/health",
+            leads: "/api/leads",
+            widgetConfig: "/api/widget-config/:projectId",
+            events: "/api/events",
+            chatSessions: "/api/chat-sessions",
+            users: "/api/users",
+            upload: "/api/upload"
+          }
+        });
+      });
+      
       app.get("/api/monitoring/stats", (req, res) => {
         if (process.env.NODE_ENV === 'production') {
           const apiKey = req.headers['x-api-key'];
@@ -339,6 +368,24 @@ async function bootstrap() {
     } catch (error) {
       app.get("/health", (req, res) => {
         res.json({ status: "ok", mode: "keyword-matching" });
+      });
+      
+      // Add /api/health endpoint even if monitoring middleware fails
+      app.get("/api/health", (req, res) => {
+        res.json({ status: "ok", mode: "keyword-matching" });
+      });
+      
+      // Add /api endpoint
+      app.get("/api", (req, res) => {
+        res.json({
+          status: "ok",
+          message: "Homesfy Chat API",
+          endpoints: {
+            health: "/api/health",
+            leads: "/api/leads",
+            widgetConfig: "/api/widget-config/:projectId"
+          }
+        });
       });
     }
     

@@ -63,7 +63,9 @@ async function bootstrap() {
     if (hasDatabaseUrl || hasIndividualVars) {
       try {
         logger.log("🔗 Attempting to connect to MySQL...");
-        const { connectMySQL, initializeSchema } = await import("./db/mysql.js");
+        // Use URL constructor with import.meta.url for reliable path resolution
+        const mysqlModuleUrl = new URL('./db/mysql.js', import.meta.url).href;
+        const { connectMySQL, initializeSchema } = await import(mysqlModuleUrl);
         await connectMySQL();
         
         // Initialize schema if needed (only in development or first run)
@@ -81,13 +83,21 @@ async function bootstrap() {
         
         // Initialize Redis cache (optional)
         try {
-          const { initRedis } = await import("./storage/redisCache.js");
+          const redisModuleUrl = new URL('./storage/redisCache.js', import.meta.url).href;
+          const { initRedis } = await import(redisModuleUrl);
           await initRedis();
         } catch (error) {
           logger.log("ℹ️  Redis caching not available (optional)");
         }
       } catch (error) {
         logger.error("❌ Failed to connect to MySQL:", error);
+        // Provide more helpful error message for module not found errors
+        if (error.message && error.message.includes('Cannot find module')) {
+          logger.error("💡 Module not found - ensure all files are deployed to the server");
+          logger.error(`   Looking for: ${error.message.match(/['"]([^'"]+)['"]/)?.[1] || 'mysql.js'}`);
+          logger.error(`   Current working directory: ${process.cwd()}`);
+          logger.error(`   Server file location: ${import.meta.url}`);
+        }
         if (process.env.NODE_ENV === 'production') {
           logger.error("⚠️ Production mode requires MySQL - some features may not work");
         } else {

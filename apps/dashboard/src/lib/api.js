@@ -5,11 +5,16 @@ const runtimeBaseUrl =
   typeof window !== "undefined" ? window.__HOMESFY_API_BASE_URL : undefined;
 
 // Detect if we're in development mode
+// Check for: Vite dev mode, localhost, OR Vite dev server port (5173, 5174, etc.)
 const isDevelopment = 
   import.meta.env.DEV || 
   (typeof window !== "undefined" && 
    (window.location.hostname === "localhost" || 
-    window.location.hostname === "127.0.0.1"));
+    window.location.hostname === "127.0.0.1" ||
+    // Detect Vite dev server by port (common Vite ports)
+    window.location.port === "5173" ||
+    window.location.port === "5174" ||
+    window.location.port === "5175"));
 
 // Determine the API base URL
 let apiBaseUrl;
@@ -30,13 +35,13 @@ if (isDevelopment) {
     apiBaseUrl = trimmed ? (/\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`) : undefined;
   }
   
-  // Production fallback - should be set via VITE_API_BASE_URL during build
+  // Production fallback - use relative path if on same domain
   if (!apiBaseUrl) {
-    console.error("⚠️ VITE_API_BASE_URL not set - API calls may fail");
-    apiBaseUrl = "/api"; // Fallback to relative path
+    apiBaseUrl = "/api"; // Use relative path (works with nginx proxy or same domain)
+    console.log("🌐 Production mode: Using relative API path /api");
+  } else {
+    console.log("🌐 Production mode: Using API at", apiBaseUrl);
   }
-  
-  console.log("🌐 Production mode: Using API at", apiBaseUrl);
 }
 
 export const api = axios.create({

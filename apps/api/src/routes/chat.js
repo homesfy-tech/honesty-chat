@@ -55,7 +55,7 @@ router.post("/", async (req, res) => {
     const agentName = widgetConfig.agentName || "Riya";
     
     logger.log("Chat API: Received propertyInfo:", propertyInfo ? Object.keys(propertyInfo) : 'none');
-    logger.log("Chat API: Message:", message);
+    // Removed sensitive logging - message content logging removed for privacy
     logger.log("Chat API: Using keyword matching for responses");
 
     // Use property info to give a helpful response

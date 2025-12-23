@@ -20,14 +20,14 @@ router.get("/", async (req, res) => {
     const { items, total } = await sessionStore.listChatSessions({
       microsite,
       leadId,
-      limit,
-      skip,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      skip: skip ? parseInt(skip, 10) : undefined,
     });
 
     res.json({ items, total });
   } catch (error) {
     logger.error("Failed to list chat sessions", error);
-    res.status(500).json({ message: "Failed to list chat sessions" });
+    res.status(500).json({ message: "Failed to list chat sessions", error: error.message });
   }
 });
 

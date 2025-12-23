@@ -34,9 +34,9 @@ async function getConfigStore() {
 }
 
 router.get("/:projectId", async (req, res) => {
+  const { projectId } = req.params;
+  
   try {
-    const { projectId } = req.params;
-    
     let config = null;
     try {
       const { getCachedConfig } = await import("../storage/redisCache.js");
@@ -80,7 +80,7 @@ router.get("/:projectId", async (req, res) => {
   } catch (error) {
     logger.error("Failed to fetch widget config", error);
     res.status(200).json({
-      projectId: projectId,
+      projectId: projectId || req.params.projectId,
       agentName: 'Riya from Homesfy',
       avatarUrl: 'https://cdn.homesfy.com/assets/riya-avatar.png',
       primaryColor: '#6158ff',

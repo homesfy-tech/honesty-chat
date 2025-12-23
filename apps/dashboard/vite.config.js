@@ -99,6 +99,42 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        // Add /uploads proxy for image files
+        "/uploads": {
+          target: "http://localhost:4000",
+          changeOrigin: true,
+          secure: false, // Allow proxying to HTTP from HTTPS
+          timeout: 30000, // 30 second timeout
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, req, res) => {
+              console.error('❌ Vite Proxy Error (uploads):', err.message);
+              console.error('   Request URL:', req.url);
+              console.error('   Target:', _options.target);
+              console.error('   Possible causes:');
+              console.error('   1. API server not running on http://localhost:4000');
+              console.error('   2. Upload file not found on server');
+              console.error('   3. Firewall blocking localhost connections');
+              
+              // Send error response to client
+              if (res && !res.headersSent) {
+                res.writeHead(502, {
+                  'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                  error: 'Proxy Error',
+                  message: 'Cannot load upload file. Please ensure the API server is running on http://localhost:4000',
+                  details: err.message,
+                }));
+              }
+            });
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log(`📡 Proxying upload: ${req.method} ${req.url} -> ${proxyReq.path}`);
+            });
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              console.log(`✅ Proxy Response (upload): ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
+            });
+          },
+        },
       },
     },
     // Explicitly define env variables to ensure they're available

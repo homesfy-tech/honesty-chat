@@ -8,24 +8,36 @@ const router = express.Router();
 
 // Helper functions to get the right storage modules
 async function getLeadStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresLeadStore.js");
+  const storageType = config.dataStore;
+  
+  // Log which storage is being used (only first time)
+  if (!getLeadStore._logged) {
+    const { logger } = await import("../utils/logger.js");
+    logger.log(`📦 Lead Storage: ${storageType === "mysql" ? "✅ MySQL Database" : "📁 File Storage"}`);
+    logger.log(`   Config dataStore: ${storageType}`);
+    logger.log(`   MYSQL_HOST: ${process.env.MYSQL_HOST ? "✅ Set" : "❌ Not set"}`);
+    logger.log(`   MYSQL_USER: ${process.env.MYSQL_USER ? "✅ Set" : "❌ Not set"}`);
+    getLeadStore._logged = true;
+  }
+  
+  if (storageType === "mysql") {
+    return await import("../storage/mysqlLeadStore.js");
   } else {
     return await import("../storage/leadStore.js");
   }
 }
 
 async function getEventStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresEventStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlEventStore.js");
   } else {
     return await import("../storage/eventStore.js");
   }
 }
 
 async function getSessionStore() {
-  if (config.dataStore === "postgresql") {
-    return await import("../storage/postgresChatSessionStore.js");
+  if (config.dataStore === "mysql") {
+    return await import("../storage/mysqlChatSessionStore.js");
   } else {
     return await import("../storage/chatSessionStore.js");
   }
@@ -173,7 +185,7 @@ router.post("/", async (req, res) => {
       location,
     });
 
-    // Get lead ID (PostgreSQL uses id, file storage uses id)
+    // Get lead ID (MySQL uses id, file storage uses id)
     const leadId = lead.id;
 
     try {
@@ -217,6 +229,19 @@ router.get("/", async (req, res) => {
   try {
     const { microsite, search, startDate, endDate, limit = 50, skip = 0 } =
       req.query;
+    
+    logger.log("📋 GET /leads request:", {
+      microsite,
+      search,
+      startDate: startDate ? new Date(startDate).toISOString() : "None (all time)",
+      endDate: endDate ? new Date(endDate).toISOString() : "None (all time)",
+      dateRange: startDate && endDate 
+        ? `${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`
+        : "All time",
+      limit,
+      skip,
+    });
+    
     const leadStore = await getLeadStore();
     const { items, total } = await leadStore.listLeads({
       microsite,
@@ -225,6 +250,17 @@ router.get("/", async (req, res) => {
       endDate,
       limit,
       skip,
+    });
+
+    logger.log("✅ GET /leads response:", {
+      itemsCount: Array.isArray(items) ? items.length : "not an array",
+      total: total,
+      hasItems: Array.isArray(items) && items.length > 0,
+      firstItem: Array.isArray(items) && items.length > 0 ? {
+        id: items[0].id || items[0]._id,
+        phone: items[0].phone,
+        microsite: items[0].microsite,
+      } : null,
     });
 
     res.json({ items, total });

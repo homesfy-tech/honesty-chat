@@ -7,18 +7,29 @@ const router = express.Router();
 
 // Helper function to get the right storage module
 async function getConfigStore() {
-  if (config.dataStore === "postgresql") {
-    const store = await import("../storage/postgresWidgetConfigStore.js");
-    return {
-      getWidgetConfig: store.getWidgetConfig,
-      updateWidgetConfig: store.updateWidgetConfig,
-    };
-  } else {
+  if (config.dataStore === "mysql") {
+    try {
+      const store = await import("../storage/mysqlWidgetConfigStore.js");
+      return {
+        getWidgetConfig: store.getWidgetConfig,
+        updateWidgetConfig: store.updateWidgetConfig,
+      };
+    } catch (error) {
+      logger.error("Failed to load MySQL store, falling back to file store", error);
+      // Fall through to file store
+    }
+  }
+  
+  // File-based store (fallback or default)
+  try {
     const store = await import("../storage/widgetConfigStore.js");
     return {
       getWidgetConfig: store.getWidgetConfig,
       updateWidgetConfig: store.upsertWidgetConfig,
     };
+  } catch (error) {
+    logger.error("Failed to load file-based store", error);
+    throw new Error("Unable to load widget config store: " + error.message);
   }
 }
 
@@ -114,5 +125,3 @@ router.post("/:projectId", requireApiKey, async (req, res) => {
 });
 
 export default router;
-
-

@@ -1,9 +1,35 @@
 import express from "express";
-import { getWidgetConfig } from "../storage/widgetConfigStore.js";
+import { config } from "../config.js";
 import { sanitizeString, sanitizeProjectId, sanitizeMicrosite, sanitizeConversation } from "../utils/sanitize.js";
 import { logger } from "../utils/logger.js";
 
 const router = express.Router();
+
+// Helper function to get the right storage module
+async function getConfigStore() {
+  if (config.dataStore === "mysql") {
+    try {
+      const store = await import("../storage/mysqlWidgetConfigStore.js");
+      return {
+        getWidgetConfig: store.getWidgetConfig,
+      };
+    } catch (error) {
+      logger.error("Failed to load MySQL store, falling back to file store", error);
+      // Fall through to file store
+    }
+  }
+  
+  // File-based store (fallback or default)
+  try {
+    const store = await import("../storage/widgetConfigStore.js");
+    return {
+      getWidgetConfig: store.getWidgetConfig,
+    };
+  } catch (error) {
+    logger.error("Failed to load file-based store", error);
+    throw new Error("Unable to load widget config store: " + error.message);
+  }
+}
 
 router.post("/", async (req, res) => {
   try {
@@ -20,6 +46,7 @@ router.post("/", async (req, res) => {
     }
 
     // Fetch widget config and property information
+    const { getWidgetConfig } = await getConfigStore();
     const widgetConfig = await getWidgetConfig(projectId);
     // Use client-provided propertyInfo if available (auto-detected), otherwise use config
     const propertyInfo = clientPropertyInfo && Object.keys(clientPropertyInfo).length > 0 

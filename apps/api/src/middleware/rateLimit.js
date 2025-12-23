@@ -10,7 +10,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDevelopment ? 1000 : 100, // Much higher limit in development
+  max: isDevelopment ? 10000 : 100, // Much higher limit in development (10000 requests per 15 min)
   message: {
     error: 'Too many requests',
     message: 'Too many requests from this IP, please try again later.',
@@ -19,7 +19,16 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   skip: (req) => {
     // Skip rate limiting for localhost in development
-    return isDevelopment && (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1');
+    // Also check for proxy headers (Vite proxy, etc.)
+    const ip = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
+    const isLocalhost = ip === '127.0.0.1' || 
+                        ip === '::1' || 
+                        ip === '::ffff:127.0.0.1' ||
+                        ip?.startsWith('127.') ||
+                        ip?.startsWith('::ffff:127.');
+    const isProxyLocalhost = req.headers['x-forwarded-for']?.includes('127.0.0.1') ||
+                            req.headers['x-real-ip'] === '127.0.0.1';
+    return isDevelopment && (isLocalhost || isProxyLocalhost);
   },
 });
 
@@ -30,7 +39,7 @@ export const apiLimiter = rateLimit({
  */
 export const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDevelopment ? 100 : 10, // Much higher limit in development
+  max: isDevelopment ? 1000 : 10, // Much higher limit in development (1000 requests per 15 min)
   message: {
     error: 'Too many requests',
     message: 'Too many config update requests, please try again later.',
@@ -39,7 +48,16 @@ export const strictLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Skip rate limiting for localhost in development
-    return isDevelopment && (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1');
+    // Also check for proxy headers (Vite proxy, etc.)
+    const ip = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
+    const isLocalhost = ip === '127.0.0.1' || 
+                        ip === '::1' || 
+                        ip === '::ffff:127.0.0.1' ||
+                        ip?.startsWith('127.') ||
+                        ip?.startsWith('::ffff:127.');
+    const isProxyLocalhost = req.headers['x-forwarded-for']?.includes('127.0.0.1') ||
+                            req.headers['x-real-ip'] === '127.0.0.1';
+    return isDevelopment && (isLocalhost || isProxyLocalhost);
   },
 });
 

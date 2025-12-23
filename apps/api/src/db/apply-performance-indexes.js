@@ -5,7 +5,7 @@
  * Usage: node src/db/apply-performance-indexes.js
  */
 
-import { connectPostgreSQL, query } from './postgresql.js';
+import { connectMySQL, query } from './mysql.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,11 +15,17 @@ const __dirname = path.dirname(__filename);
 
 async function applyIndexes() {
   try {
-    console.log('🔗 Connecting to PostgreSQL...');
-    await connectPostgreSQL();
+    console.log('🔗 Connecting to MySQL...');
+    await connectMySQL();
     
     console.log('📊 Applying performance indexes...');
     const indexPath = path.join(__dirname, 'performance-indexes.sql');
+    
+    if (!fs.existsSync(indexPath)) {
+      console.log('ℹ️  No performance-indexes.sql file found. Indexes are already defined in mysql-schema.sql');
+      process.exit(0);
+    }
+    
     const indexSQL = fs.readFileSync(indexPath, 'utf8');
     
     // Split by semicolons and execute each statement
@@ -37,11 +43,12 @@ async function applyIndexes() {
     for (const statement of statements) {
       if (statement.trim()) {
         try {
-          await query(statement);
+          await query(statement, []);
           console.log('✅ Applied:', statement.substring(0, 60) + '...');
         } catch (error) {
           // Ignore "already exists" errors
-          if (error.message && error.message.includes('already exists')) {
+          if (error.code === 'ER_DUP_KEYNAME' || 
+              (error.message && error.message.includes('already exists'))) {
             console.log('ℹ️  Already exists:', statement.substring(0, 60) + '...');
             continue;
           }
@@ -59,4 +66,3 @@ async function applyIndexes() {
 }
 
 applyIndexes();
-

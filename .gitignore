@@ -91,6 +91,14 @@ Thumbs.db
 .cache/
 .temp/
 
+# Backup files
+*.bak
+*.old
+*-bak-*
+*-old-*
+*.*-bak
+*.*-old
+
 # Test files and local testing
 test-widget-local.html
 LOCAL_EMBED_SCRIPT.html

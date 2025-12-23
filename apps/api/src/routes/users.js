@@ -9,7 +9,7 @@ const router = express.Router();
 // Get all users (without passwords)
 router.get("/", async (req, res) => {
   try {
-    // Check if using PostgreSQL or fallback to env
+    // Check if using MySQL or fallback to env
     let users;
     try {
       users = await User.findAll();
@@ -83,7 +83,7 @@ router.post("/auth", authLimiter, async (req, res) => {
     let isValid = false;
 
     try {
-      // Try PostgreSQL first
+      // Try MySQL first
       user = await User.findByUsername(username.trim());
       if (user) {
         isValid = await User.verifyPassword(password, user.password_hash);
@@ -156,7 +156,7 @@ router.post("/verify", async (req, res) => {
     }
 
     try {
-      // Try PostgreSQL session verification
+      // Try MySQL session verification
       const session = await Session.findByToken(token);
       if (session && session.username === username) {
         return res.json({ 

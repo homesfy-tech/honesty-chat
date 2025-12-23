@@ -8,6 +8,9 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const configFilePath = path.resolve(moduleDir, "../../data/widget-config.json");
 const configFilePathAlt = path.resolve(process.cwd(), "data/widget-config.json");
 
+const FILE_NAME = "widget-config.json";
+const DEFAULT_STORE = { configs: [] };
+
 let widgetConfigData = null;
 function loadConfigFile() {
   const cwd = process.cwd();
@@ -51,20 +54,19 @@ function loadConfigFile() {
 }
 
 // Load config at module initialization - don't crash if file not found
-try {
-  widgetConfigData = loadConfigFile();
-  if (!widgetConfigData) {
-    console.warn("⚠️ Widget config file not found at initialization - will use defaults");
+(function initializeConfig() {
+  try {
+    widgetConfigData = loadConfigFile();
+    if (!widgetConfigData) {
+      console.warn("⚠️ Widget config file not found at initialization - will use defaults");
+      widgetConfigData = DEFAULT_STORE;
+    }
+  } catch (error) {
+    console.error("❌ Error loading widget config at initialization:", error.message);
+    console.warn("⚠️ Using default empty config - widget will use hardcoded defaults");
     widgetConfigData = DEFAULT_STORE;
   }
-} catch (error) {
-  console.error("❌ Error loading widget config at initialization:", error.message);
-  console.warn("⚠️ Using default empty config - widget will use hardcoded defaults");
-  widgetConfigData = DEFAULT_STORE;
-}
-
-const FILE_NAME = "widget-config.json";
-const DEFAULT_STORE = { configs: [] };
+})();
 
 async function loadStore() {
   const freshConfig = loadConfigFile();
@@ -217,5 +219,4 @@ export async function upsertWidgetConfig(projectId, update) {
   configCache.set(projectId, updated);
   return updated;
 }
-
 

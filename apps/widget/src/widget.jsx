@@ -560,6 +560,12 @@ async function init(options = {}) {
     apiBaseUrl = null;
   }
   
+  // Normalize apiBaseUrl - remove trailing /api if present (widget will append it)
+  if (apiBaseUrl) {
+    apiBaseUrl = apiBaseUrl.replace(/\/api\/?$/, ''); // Remove trailing /api or /api/
+    apiBaseUrl = apiBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+  }
+  
   console.log("HomesfyChat: Using API Base URL:", apiBaseUrl);
   const microsite =
     options.microsite || scriptElement?.dataset.microsite || window.location.hostname;

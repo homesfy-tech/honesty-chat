@@ -11,7 +11,7 @@ export function LeadsPage() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [datePreset, setDatePreset] = useState("30d");
+  const [datePreset, setDatePreset] = useState("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
@@ -31,15 +31,89 @@ export function LeadsPage() {
           customEnd,
         });
 
+        // Log the date range being used
+        console.log("📅 Date Filter:", {
+          preset: datePreset,
+          startDate: startDate ? new Date(startDate).toLocaleString() : "None (all time)",
+          endDate: endDate ? new Date(endDate).toLocaleString() : "None (all time)",
+        });
+
         if (startDate) params.startDate = startDate;
         if (endDate) params.endDate = endDate;
 
         const response = await api.get("/leads", {
           params,
         });
-        setLeads(response.data.items ?? []);
+        
+        // Debug: Log the full response structure
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📋 Leads API Response - Full Details:");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("Response Status:", response.status);
+        console.log("Response Headers:", response.headers);
+        console.log("Response Data (raw):", response.data);
+        console.log("Response Data Type:", typeof response.data);
+        console.log("Is Array?", Array.isArray(response.data));
+        console.log("Has 'items' property?", !!response.data?.items);
+        console.log("Has 'total' property?", !!response.data?.total);
+        
+        if (response.data?.items) {
+          console.log("Items Type:", Array.isArray(response.data.items) ? "array" : typeof response.data.items);
+          console.log("Items Length:", Array.isArray(response.data.items) ? response.data.items.length : "N/A");
+          if (Array.isArray(response.data.items) && response.data.items.length > 0) {
+            console.log("First Item Sample:", response.data.items[0]);
+          }
+        }
+        
+        if (response.data?.total !== undefined) {
+          console.log("Total Count:", response.data.total);
+        }
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+        // Handle different response structures
+        let leadsData = [];
+        if (response.data) {
+          if (Array.isArray(response.data)) {
+            // If response.data is directly an array
+            console.log("📦 Response is direct array, using as-is");
+            leadsData = response.data;
+          } else if (response.data.items && Array.isArray(response.data.items)) {
+            // If response.data has an items property (expected format)
+            console.log("📦 Response has 'items' property, extracting array");
+            leadsData = response.data.items;
+          } else if (Array.isArray(response.data.data)) {
+            // If response.data has a data property
+            console.log("📦 Response has 'data' property, extracting array");
+            leadsData = response.data.data;
+          } else {
+            console.warn("⚠️ Unexpected response structure:", {
+              keys: Object.keys(response.data),
+              data: response.data,
+            });
+          }
+        } else {
+          console.warn("⚠️ Response data is null or undefined");
+        }
+        
+        console.log("✅ Processed leads:", {
+          count: leadsData.length,
+          isEmpty: leadsData.length === 0,
+          sample: leadsData.length > 0 ? leadsData[0] : null,
+        });
+        
+        if (leadsData.length === 0) {
+          console.log("ℹ️ No leads found. This is normal if the database is empty.");
+          console.log("   To test, create a lead via the widget or API.");
+        }
+        
+        setLeads(leadsData);
       } catch (error) {
-        console.error("Failed to fetch leads", error);
+        console.error("❌ Failed to fetch leads", error);
+        console.error("Error details:", {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        });
       } finally {
         setLoading(false);
       }
@@ -290,7 +364,7 @@ export function LeadsPage() {
               type="button"
               onClick={() => {
                 setSearchTerm("");
-                setDatePreset("30d");
+                setDatePreset("all");
                 setCustomStart("");
                 setCustomEnd("");
               }}
@@ -377,6 +451,11 @@ function formatPhoneForExport(lead) {
 function resolveDateRange({ datePreset, customStart, customEnd }) {
   const now = new Date();
 
+  // "all" means no date filter - show all leads
+  if (datePreset === "all") {
+    return { startDate: undefined, endDate: undefined };
+  }
+
   if (datePreset === "custom") {
     const start = customStart ? new Date(customStart) : null;
     const end = customEnd ? new Date(customEnd) : null;
@@ -414,6 +493,7 @@ function DateFilters({
   const startInputRef = useRef(null);
   const endInputRef = useRef(null);
   const presets = [
+    { value: "all", label: "All time" },
     { value: "7d", label: "Last 7 days" },
     { value: "30d", label: "Last 30 days" },
     { value: "custom", label: "Custom" },
